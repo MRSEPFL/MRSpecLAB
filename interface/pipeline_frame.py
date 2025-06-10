@@ -101,26 +101,25 @@ class PipelineFrame(wx.Frame):
         self.Parent.update_statusbar()
         self.Hide()
         
-    def on_save_pipeline(self, event, filepath=None):
+    def on_save_pipeline(self, event, filepath=None, man_adj_params=None):
         self.Parent.retrieve_pipeline()
-        if self.Parent.steps == []:
-            utils.log_warning("No pipeline to save")
-            return
+        if len(self.Parent.steps) == 0 or len(self.nodegraph.nodes) == 0:
+            return utils.log_warning("No pipeline to save")
         if filepath is None:
             fileDialog = wx.FileDialog(self, "Save pipeline as", wildcard="Pipeline files (*.pipe)|*.pipe", defaultDir=os.getcwd(), style=wx.FD_SAVE)
             if fileDialog.ShowModal() == wx.ID_CANCEL: return
             filepath = fileDialog.GetPath()
         if filepath == "":
-            utils.log_error(f"File not found")
-            return
-        tosave = []
+            return utils.log_error(f"File not found")
+        tosave = [[]]
         nodes = dict(self.nodegraph.nodes)
         for n in nodes.keys():
             params = [(v.idname, v.value) for k, v in nodes[n].properties.items()]
-            tosave.append([nodes[n].idname, nodes[n].id, nodes[n].pos, params])
-        tosave = [tosave]
+            tosave[0].append([nodes[n].idname, nodes[n].id, nodes[n].pos, params])
         wires = list(self.nodegraph.wires)
         tosave.append([[w.srcsocket.node.id, w.srcsocket.idname, w.dstsocket.node.id, w.dstsocket.idname] for w in wires])
+        if man_adj_params is not None:
+            tosave.append(man_adj_params)
         with open(filepath, 'wb') as f:
             pickle.dump(tosave, f)
         if event is not None: event.Skip()
@@ -135,10 +134,11 @@ class PipelineFrame(wx.Frame):
                 return
             filepath = fileDialog.GetPath()
         if filepath == "" or not os.path.exists(filepath):
-            utils.log_error("File not found: " + filepath)
-            return
+            return utils.log_error("File not found: " + filepath)
         with open(filepath, 'rb') as f:
-            toload = pickle.load(f)
+            try: toload = pickle.load(f)
+            except Exception as e: # if file is empty after crash for example
+                return utils.log_error(f"Error loading pipeline file: {e}")
         self.nodegraph.nodes = {}
         self.nodegraph.wires = []
         for data in toload[0]:
@@ -149,11 +149,12 @@ class PipelineFrame(wx.Frame):
             src = self.nodegraph.nodes[data[0]].FindSocket(data[1])
             dst = self.nodegraph.nodes[data[2]].FindSocket(data[3])
             self.nodegraph.ConnectNodes(src, dst)
+        if len(toload) > 2:
+            self.Parent.manual_adjustment_params = toload[2]
         self.nodegraph.Refresh()
         self.Parent.retrieve_pipeline()
         self.Parent.update_statusbar()
-        if event is not None:
-            event.Skip()
+        if event is not None: event.Skip()
 
     def on_apply(self, event):
         self.Parent.retrieve_pipeline()

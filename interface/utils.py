@@ -12,6 +12,15 @@ supported_sequences = {
     "MEGA": ["MEGA", "mega"]
 }
 
+larmor_frequencies = {
+    "1H": 42.577,
+    "31P": 17.235,
+    "23Na": 11.262,
+    "2H": 6.536,
+    "13C": 10.7084,
+    "19F": 40.078
+}
+
 myEVT_LOG = wx.NewEventType()
 EVT_LOG = wx.PyEventBinder(myEVT_LOG, 1)
 class LogEvent(wx.PyCommandEvent):

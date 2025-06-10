@@ -26,8 +26,8 @@ import shutil
 
 
 import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
+# import matplotlib.pyplot as plt
+# import pandas as pd
 import nibabel as nib
 from scipy.ndimage import rotate, zoom
 #import cv2
@@ -36,7 +36,6 @@ from scipy.ndimage import rotate, zoom
 from interface.metabolite_map_frame import MetaboliteMapParameterDialog
 from processing.get_mapping import create_brain_mask
 
-
 from interface import utils
 from interface.pipeline_frame import PipelineFrame
 from interface.fitting_frame import FittingFrame
@@ -44,7 +43,7 @@ from interface.main_layout import LayoutFrame
 from interface.plot_helpers import plot_coord, get_coord_info#, plot_ext
 from processing.processing_pipeline import processPipeline, autorun_pipeline_exe
 from inout.read_coord import ReadlcmCoord
-from inout.group_files_by_header import group_files_by_header, group_water_files_by_header
+# from inout.group_files_by_header import group_files_by_header, group_water_files_by_header
 
 class MainFrame(LayoutFrame):
 
@@ -64,6 +63,7 @@ class MainFrame(LayoutFrame):
         self.csf_file_user = None
 
         self.skip_manual_adjustment = False
+        self.manual_adjustment_params = None
 
         self.batch_mode = False      # Will be True when "Run in Batch Mode" is toggled.
         self.batch_folder = None     # Will store the path to the batch system folder.
@@ -71,10 +71,10 @@ class MainFrame(LayoutFrame):
         
         #self.background_image = self.load_background_image() #check what it does
 
-        self.param = {
-            "vmin": None,
-            "vmax": None,
-        }
+        # self.param = {
+        #     "vmin": None,
+        #     "vmax": None,
+        # }
 
         self.brain_image = {
             "selected_img_path": None,
@@ -103,16 +103,14 @@ class MainFrame(LayoutFrame):
         self.external_nodes_library = os.path.join(os.getcwd(), "customer_nodes")
         try:
             if not os.path.exists(self.external_nodes_library): os.mkdir(self.external_nodes_library)
-        except:
-            self.on_open_external_nodes(wx.PyEvent())
+        except: self.on_open_external_nodes()
         self.copy_customer_processing_scripts()
 
 
         self.outputpath_base = os.path.join(os.getcwd(), "output")
         try:
             if not os.path.exists(self.outputpath_base): os.mkdir(self.outputpath_base)
-        except:
-            self.on_change_output(wx.PyEvent())
+        except: self.on_change_output()
         self.outputpath = self.outputpath_base
         self.load_lastfiles()
 
@@ -126,8 +124,8 @@ class MainFrame(LayoutFrame):
         self.metabolite_map_frame = MetaboliteMapParameterDialog(parent=self) # /!\ put this after retrieve_steps
         self.metabolite_map_frame.Hide()
 
-        self.load_brain_image()
-        self.update_map()
+        # self.load_brain_image()
+        # self.update_map()
 
         self.CreateStatusBar(1)
         self.update_statusbar()
@@ -136,9 +134,8 @@ class MainFrame(LayoutFrame):
         if os.path.exists(pipeline_filepath):
             self.pipeline_frame.on_load_pipeline(event=None, filepath=pipeline_filepath)
 
-        self.Bind(wx.EVT_CLOSE, self.on_close) # save last files on close
-        self.Bind(wx.EVT_BUTTON, self.on_reset, self.button_terminate_processing)
-        self.Bind(wx.EVT_BUTTON, self.on_autorun_processing, self.button_auto_processing)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
+        self.Bind(wx.EVT_SIZE, self.on_resize)
         self.Bind(wx.EVT_BUTTON, self.on_open_output_folder, self.folder_button)
         self.Bind(wx.EVT_BUTTON, self.on_open_pipeline, self.pipeline_button)
         self.Bind(wx.EVT_BUTTON, self.on_open_external_nodes, self.extenal_nodes)
@@ -147,43 +144,23 @@ class MainFrame(LayoutFrame):
         self.Bind(wx.EVT_TOGGLEBUTTON, self.on_show_debug, self.show_debug_button)
         self.Bind(wx.EVT_CHECKBOX, self.on_toggle_debug, self.debug_button)
         self.Bind(wx.EVT_BUTTON, self.on_reload, self.reload_button)
-        self.Bind(wx.EVT_SIZE, self.on_resize)
-        self.Bind(wx.EVT_BUTTON, self.on_button_step_processing, self.button_step_processing)
         self.Bind(wx.EVT_COMBOBOX, self.on_plot_box_selection)
-        self.Bind(wx.EVT_BUTTON, self.on_open_metabolite_map_plot, self.button_nplot)
-
         self.Bind(wx.EVT_BUTTON, self.on_create_batch, self.create_batch_button)
         self.Bind(wx.EVT_BUTTON, self.on_load_batch, self.load_batch_button)
         self.Bind(wx.EVT_CHECKBOX, self.on_toggle_batch, self.run_batch_toggle)
+
+        self.Bind(wx.EVT_BUTTON, self.on_button_step_processing, self.button_step_processing)
+        self.Bind(wx.EVT_BUTTON, self.on_autorun_processing, self.button_auto_processing)
+        self.Bind(wx.EVT_BUTTON, self.on_reset, self.button_terminate_processing)
+        self.Bind(wx.EVT_BUTTON, self.on_open_metabolite_map_plot, self.button_nplot)
 
         self.on_show_debug(None)
         self.reset()
 
     def on_reset(self, event=None):
-        self.processing = False
-        self.fast_processing = False
-        self.button_terminate_processing.Disable()
-        self.button_step_processing.Enable()
-        self.button_auto_processing.Enable()
-        if self.current_step >= len(self.steps):
-            self.button_step_processing.SetBitmap(self.run_bmp)
-        self.button_auto_processing.SetBitmap(self.autorun_bmp)
-        if self.current_step > 0:
-            utils.log_info("Reset processing steps.")
-        self.current_step = 0
-
-        # Clear previous run's data so that loadInput is forced to reload the input files.
-        self.originalData = None
-        self.originalWref = None
-        self.dataSteps = []
-        self.wrefSteps = []
-        
-        # (Optionally, you might want to also clear the filepaths if you wish to force re-drop of data)
-        # self.MRSfiles.filepaths = []
-        # self.Waterfiles.filepaths = []
-        
+        self.reset()
         self.plot_box.Clear()
-        self.plot_box.Append("")  # Start with an empty selection
+        self.plot_box.Append("")
         self.plot_box.SetSelection(0)
         self.matplotlib_canvas.clear()  
         self.matplotlib_canvas.draw()
@@ -202,18 +179,13 @@ class MainFrame(LayoutFrame):
             self.button_step_processing.SetBitmap(self.run_bmp)
         self.button_auto_processing.SetBitmap(self.autorun_bmp)
         self.current_step = 0
-        # Clear previous run's data so that loadInput is forced to reload the input files.
         self.originalData = None
         self.originalWref = None
         self.dataSteps = []
         self.wrefSteps = []
+        # self.manual_adjustment_params = None
         self.Layout()
         if event is not None: event.Skip()
-    
-   
-    
-
-
 
 
     def copy_customer_processing_scripts(self):
@@ -222,79 +194,30 @@ class MainFrame(LayoutFrame):
         backup_folder = os.path.join(self.programpath, "customer_nodes/backup")
         destination_folder = os.path.join(self.programpath, "nodes")
         try:
-            # Ensure the destination folder exists; create it if it doesn't
             os.makedirs(destination_folder, exist_ok=True)
-
-
-            # Loop through each source folder
-            #for source_folder in source_folders:
-            # Find all Python (.py) files in the current source folder
             python_files = glob.glob(os.path.join(source_folders, '*.py'))
-               
-            # Copy each file to the destination folder
             for file_path in python_files:
                 file_name = os.path.basename(file_path)
                 destination_path = os.path.join(destination_folder, file_name)
-
-
-                # # Check if a file with the same name already exists
-                # if os.path.exists(destination_path):
-                #     base_name, extension = os.path.splitext(file_name)
-                #     counter = 1
-
-
-                #     # Find a unique filename by appending a counter
-                #     while os.path.exists(destination_path):
-                #         new_file_name = f"{base_name}_{counter}{extension}"
-                #         destination_path = os.path.join(destination_folder, new_file_name)
-                #         counter += 1
-
-
-                # Check if a file with the same name already exists
                 if os.path.exists(destination_path):
-                    # Send a reminder
-                    print(f"Reminder: The file '{file_name}' already exists in '{destination_folder}'.")
-                   
-                    # Prepare to back up the old file
+                    utils.log_warning(f"The file '{file_name}' already exists in '{destination_folder}'.")
                     os.makedirs(backup_folder, exist_ok=True)
                     backup_path = os.path.join(backup_folder, file_name)
-
-
-                    # Create a unique backup filename if necessary
                     if os.path.exists(backup_path):
                         base_name, extension = os.path.splitext(file_name)
                         counter = 1
-                       
-                        # Find a unique backup filename by appending a counter
                         while os.path.exists(backup_path):
                             backup_path = os.path.join(backup_folder, f"{base_name}_{counter}{extension}")
                             counter += 1
-                   
-                    # Move the existing file to the backup folder
                     shutil.move(destination_path, backup_path)
-                    print(f"Backup of the existing file has been created: '{backup_path}'")
-
-
-                # Copy the new file to the destination folder
+                    utils.log_debug(f"Backup of the existing file has been created: '{backup_path}'")
                 shutil.copy(file_path, destination_path)
-                print(f"'{file_path}' has been copied to '{destination_path}'.")
+                utils.log_debug(f"'{file_path}' has been copied to '{destination_path}'.")
+            utils.log_info("All Customer Processing scripts have been copied successfully.")
 
-
-                # # Copy the file to the unique destination path
-                # shutil.copy(file_path, destination_path)
-                # print(f"Copied '{file_path}' to '{destination_path}'")
-
-
-            print("All Customer Processing scripts have been copied successfully.")
-
-
-        except FileNotFoundError:
-            print(f"One of the source folders not found.")
-        except PermissionError:
-            print("Permission denied. Please check your folder permissions.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
-
+        except FileNotFoundError: utils.log_error(f"One of the source folders not found.")
+        except PermissionError: utils.log_error("Permission denied. Please check your folder permissions.")
+        except Exception as e: utils.log_error(f"An error occurred: {e}")
 
     def retrieve_steps(self):
         self.programpath = os.path.dirname(os.path.dirname(__file__))
@@ -315,6 +238,8 @@ class MainFrame(LayoutFrame):
         self.SetStatusText("Current pipeline: " + " → ".join(step.__class__.__name__ for step in self.steps))
 
     def on_button_step_processing(self, event):
+        if self.MRSfiles.list.GetCount() == 0:
+            return utils.log_error("No MRS files loaded. Please load files before processing.")
         if self.current_step > len(self.steps):
             self.on_reset()
         self.button_step_processing.Disable()
@@ -326,10 +251,10 @@ class MainFrame(LayoutFrame):
         event.Skip()
         
     def on_autorun_processing(self, event):
+        if self.MRSfiles.list.GetCount() == 0:
+            return utils.log_error("No MRS files loaded. Please load files before processing.")
         if self.batch_mode:
-            # If in batch mode, disable individual step processing
             self.button_step_processing.Disable()
-            # Start batch processing in a new thread
             thread_batch = threading.Thread(target=self.run_batch_processing)
             thread_batch.start()
         else:
@@ -349,12 +274,9 @@ class MainFrame(LayoutFrame):
             event.Skip()
 
     def load_brain_image(self):
-        """Load a 3D NIfTI image and return the data."""
-        # Check if self.img_file_user has a valid path
         if self.brain_image["selected_img_path"] is not None:
-            # Use the stored path from self.img_file_user
-            img = nib.load(self.brain_image["selected_img_path"])  # Load the image from the file path stored in self.img_file_user
-            return img.get_fdata()  # Get the data from the NIfTI file
+            img = nib.load(self.brain_image["selected_img_path"])
+            return img.get_fdata()
         else:
             utils.log_info(f"Image file is not set.")
 
@@ -372,18 +294,15 @@ class MainFrame(LayoutFrame):
         event.Skip()
     
     def update_map(self):
-
         fig = self.matplotlib_canvas.figure
-        fig.clf()  # Clear figure
-        self.matplotlib_canvas.draw()  # Refresh the canvas
+        fig.clear()
+        self.matplotlib_canvas.draw()
         utils.log_info("Start update main canvas")
 
         # if (self.brain_image["selected_img"] is None or self.brain_image["selected_img"].size == 0) and \
         if (self.brain_image["selected_img_path"] is None or self.brain_image["selected_img"] is None) and \
         (self.data_to_plot["coord"] is None):
-            utils.log_info("Nothing to plot")
-            return  # Nothing to plot
-
+            return utils.log_info("Nothing to plot")
         ax = fig.add_subplot(111)
 
         # Handle background image
@@ -417,42 +336,40 @@ class MainFrame(LayoutFrame):
             if self.brain_image["selected_img"] is not None and self.brain_image["selected_img"].size > 0:
                 background_height, background_width = background_slice.shape
                 concentration_masked = zoom(conc_map, (background_height / conc_map.shape[0], background_width / conc_map.shape[1]), order=1)
-                mask = create_brain_mask(background_slice)  # Assuming mask function exists
+                mask = create_brain_mask(background_slice)
                 concentration_masked = np.where(mask == 1, concentration_masked, np.nan)
 
-            cax = ax.imshow(concentration_masked, cmap='coolwarm', interpolation='nearest', alpha=1, vmin=self.param["vmin"], vmax=self.param["vmax"])
+            # cax = ax.imshow(concentration_masked, cmap='coolwarm', interpolation='nearest', alpha=1, vmin=self.param["vmin"], vmax=self.param["vmax"])
+            cax = ax.imshow(concentration_masked, cmap='coolwarm', interpolation='nearest', alpha=1, vmin=None, vmax=None)
             fig.colorbar(cax, ax=ax, orientation='vertical', label='Concentration')
             ax.set_title(f"Slice {self.data_to_plot['slice']} (min={vmin:.2g}, max={vmax:.2g})")
             ax.axis('off')
 
         self.matplotlib_canvas.draw_idle()
 
-    def on_open_external_nodes(self, event):
+    def on_open_external_nodes(self, event=None):
             dirDialog = wx.DirDialog(self.Parent, "Select a folder for the customer nodes library", style=wx.DD_DIR_MUST_EXIST)
             if dirDialog.ShowModal() == wx.ID_CANCEL: return
             temp = os.path.join(dirDialog.GetPath())
             if not os.path.exists(temp):
                 try: os.mkdir(temp)
-                except:
-                    utils.log_error(f"Could not create folder {temp}")
-                    return
+                except: return utils.log_error(f"Could not create folder {temp}")
             self.external_nodes_library = temp
             self.copy_customer_processing_scripts()
             self.retrieve_steps()
             self.retrieve_pipeline()
             self.update_statusbar()
+            if event is not None: event.Skip()
 
-
-    def on_change_output(self, event):
+    def on_change_output(self, event=None):
         dirDialog = wx.DirDialog(self.Parent, "Choose a new output folder", style=wx.DD_DIR_MUST_EXIST)
         if dirDialog.ShowModal() == wx.ID_CANCEL: return
         temp = os.path.join(dirDialog.GetPath(), "output")
         if not os.path.exists(temp):
             try: os.mkdir(temp)
-            except:
-                utils.log_error(f"Could not create folder {temp}")
-                return
+            except: return utils.log_error(f"Could not create folder {temp}")
         self.outputpath_base = temp
+        if event is not None: event.Skip()
 
     def on_open_fitting(self, event):
         self.fitting_frame.Show()
@@ -531,35 +448,28 @@ class MainFrame(LayoutFrame):
                     self.steps.append(current_node)
 
     def on_create_batch(self, event):
-        # Prompt for study name and number of participants
+        study_name = None
+        num_participants = None
         dlg = wx.TextEntryDialog(self, "Enter Study Name:", "Create Batch Folder System")
         if dlg.ShowModal() == wx.ID_OK:
             study_name = dlg.GetValue().strip()
-        else:
-            dlg.Destroy()
-            return
         dlg.Destroy()
+        if not study_name: return
 
         num_dlg = wx.NumberEntryDialog(self, "Enter Number of Participants", "Number of Participants:", "Create Batch Folder System", 1, 1, 100)
         if num_dlg.ShowModal() == wx.ID_OK:
             num_participants = num_dlg.GetValue()
-        else:
-            num_dlg.Destroy()
-            return
         num_dlg.Destroy()
+        if num_participants is None or num_participants < 1: return
 
-        # Prompt for a parent folder where the batch system will be created
         dirDialog = wx.DirDialog(self, "Choose a folder to create the Batch System", style=wx.DD_DIR_MUST_EXIST)
-        if dirDialog.ShowModal() == wx.ID_CANCEL:
-            return
+        if dirDialog.ShowModal() == wx.ID_CANCEL: return
         parent_folder = dirDialog.GetPath()
         dirDialog.Destroy()
 
-        # Create the study folder
         study_folder = os.path.join(parent_folder, study_name)
         try:
             os.makedirs(study_folder, exist_ok=True)
-            # Create subfolders for each participant and the required subfolders
             self.batch_participants = []  # Clear any previous list
             for i in range(1, num_participants + 1):
                 participant_folder = os.path.join(study_folder, f"Participant{i}")
@@ -572,90 +482,64 @@ class MainFrame(LayoutFrame):
             custom_control = os.path.join(study_folder, "custom.CONTROL")
             open(custom_basis, "w").close()
             open(custom_control, "w").close()
-
             wx.MessageBox(f"Batch folder system created under:\n{study_folder}", "Success", wx.OK | wx.ICON_INFORMATION)
         except Exception as e:
             wx.MessageBox(f"Error creating batch folders:\n{e}", "Error", wx.OK | wx.ICON_ERROR)
     
     def on_load_batch(self, event):
         dirDialog = wx.DirDialog(self, "Select the Batch System Folder (Study Folder)", style=wx.DD_DIR_MUST_EXIST)
-        if dirDialog.ShowModal() == wx.ID_CANCEL:
-            return
+        if dirDialog.ShowModal() == wx.ID_CANCEL: return
         self.batch_folder = dirDialog.GetPath()
         dirDialog.Destroy()
-
         try:
-            # Only load subfolders that begin with "Participant" (case-insensitive).
             self.batch_participants = [
                 os.path.join(self.batch_folder, d)
                 for d in os.listdir(self.batch_folder)
                 if os.path.isdir(os.path.join(self.batch_folder, d))
                 and d.lower().startswith("participant")
             ]
-
             count = len(self.batch_participants)
-            wx.MessageBox(f"Loaded {count} participant folder{'s' if count != 1 else ''}.",
-                        "Batch Loaded", wx.OK | wx.ICON_INFORMATION)
-
+            wx.MessageBox(f"Loaded {count} participant folder{'s' if count != 1 else ''}.", "Batch Loaded", wx.OK | wx.ICON_INFORMATION)
         except Exception as e:
             wx.MessageBox(f"Error loading batch folder:\n{e}", "Error", wx.OK | wx.ICON_ERROR)
 
     def on_toggle_batch(self, event):
         self.batch_mode = self.run_batch_toggle.GetValue()
-        if self.batch_mode:
-            self.button_step_processing.Disable()
-        else:
-            self.button_step_processing.Enable()
+        self.button_step_processing.Enable(not self.batch_mode)
         event.Skip()
 
     def run_batch_processing(self):
         if not self.batch_participants:
-            wx.MessageBox("No batch system loaded or created. Please load or create one.", "Batch Mode", wx.OK | wx.ICON_WARNING)
-            return
-        # For each participant folder, update the file panels and run the pipeline
-        try:
+            return utils.log_error("No batch system loaded or created. Please load or create one.")
+        try: # why?
             self.MRSfiles.clear()
-        except:
-            pass
-        try:
             self.Waterfiles.clear()
-        except:
-            pass
+        except: pass
 
         import datetime
-
         prefix = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_output"
         self.batch_study_folder = os.path.join(self.batch_folder, prefix)
         os.mkdir(self.batch_study_folder)
 
-
         basis_candidates = []
         control_candidates = []
-
-        # We do a simple iteration over the batch folder
         for fname in os.listdir(self.batch_folder):
             fullpath = os.path.join(self.batch_folder, fname)
-            # Must be an actual file
-            if not os.path.isfile(fullpath):
-                continue
-            # Check extension
+            if not os.path.isfile(fullpath): continue
             fname_lower = fname.lower()
             if fname_lower.endswith(".basis"):
                 basis_candidates.append(fullpath)
             elif fname_lower.endswith(".control"):
                 control_candidates.append(fullpath)
 
-        # If we found any .BASIS file with size > 0, pick the first
         self.basis_file_user = None
         if basis_candidates:
-            # Sort them or just pick the first
             basis_candidates.sort()
             first_basis = basis_candidates[0]
             if os.path.getsize(first_basis) > 0:
                 self.basis_file_user = first_basis
                 utils.log_info(f"Using custom BASIS file for all participants: {first_basis}")
 
-        # If we found any .CONTROL file with size > 0, pick the first
         self.control_file_user = None
         if control_candidates:
             control_candidates.sort()
@@ -667,66 +551,49 @@ class MainFrame(LayoutFrame):
         for part_folder in self.batch_participants:
             try:
                 self.participant_name = os.path.basename(part_folder)
-
                 wx.CallAfter(self.reset)
 
                 import time
 
-                # For example, assume that metabolite files are in the "metabolite_files" subfolder
                 met_folder = os.path.join(part_folder, "metabolite_files")
                 water_folder = os.path.join(part_folder, "water_reference")
-                # Update file lists:
                 if os.path.exists(met_folder):
                     met_files = [os.path.join(met_folder, f) for f in os.listdir(met_folder)
                                 if f.lower().endswith(tuple(utils.supported_files))]
-                    wx.CallAfter(self.MRSfiles.on_drop_files, met_files)
-                    time.sleep(0.5)
-                else:
-                    self.MRSfiles.on_drop_files([])
+                    # wx.CallAfter(self.MRSfiles.on_drop_files, met_files)
+                    # time.sleep(0.5) # why?
+                    self.MRSfiles.on_drop_files(met_files)
+                else: self.MRSfiles.on_drop_files([])
                 if os.path.exists(water_folder):
                     water_files = [os.path.join(water_folder, f) for f in os.listdir(water_folder)
                                 if f.lower().endswith(tuple(utils.supported_files))]
-                    wx.CallAfter(self.Waterfiles.on_drop_files, water_files)
-                    time.sleep(0.5)
-                else:
-                    self.Waterfiles.on_drop_files([])
+                    # wx.CallAfter(self.Waterfiles.on_drop_files, water_files)
+                    # time.sleep(0.5) # why?
+                    self.Waterfiles.on_drop_files(water_files)
+                else: self.Waterfiles.on_drop_files([])
 
                 seg_folder = os.path.join(part_folder, "tissue_segmentation_files")
                 self.wm_file_user = None
                 self.gm_file_user = None
                 self.csf_file_user = None
                 if os.path.exists(seg_folder):
-                    seg_files = [
-                        os.path.join(seg_folder, f)
-                        for f in os.listdir(seg_folder)
-                        # You can refine this if you want only .nii or .nii.gz
-                    ]
-                    # For example, pick a file with 'wm' in its name
+                    seg_files = [os.path.join(seg_folder, f) for f in os.listdir(seg_folder)]
                     for f in seg_files:
                         fname_lower = os.path.basename(f).lower()
-                        if "wm" in fname_lower:
-                            self.wm_file_user = f
-                        elif "gm" in fname_lower:
-                            self.gm_file_user = f
-                        elif "csf" in fname_lower:
-                            self.csf_file_user = f
+                        if "wm" in fname_lower: self.wm_file_user = f
+                        elif "gm" in fname_lower: self.gm_file_user = f
+                        elif "csf" in fname_lower: self.csf_file_user = f
 
                 if len(self.MRSfiles.filepaths) == 0 and len(self.Waterfiles.filepaths) == 0:
                     utils.log_warning("No input files found for participant " + self.participant_name + "; skipping.")
                     continue
 
-                # Reset processing state for the new participant
-                
-                # You can choose auto-run mode for each participant
                 self.fast_processing = True
                 autorun_pipeline_exe(self)
                 
                 self.MRSfiles.clear()
                 self.Waterfiles.clear()
-                # Optionally wait for the current run to complete (or add a delay)
-                # You might want to update a progress indicator, etc.
-            except Exception as e:
-                utils.log_error(f"Processing failed for {part_folder}: {e}")
+            except Exception as e: utils.log_error(f"Processing failed for {part_folder}: {e}")
         wx.MessageBox("Batch processing complete.", "Batch Mode", wx.OK | wx.ICON_INFORMATION)
     
     def save_lastfiles(self):
@@ -744,7 +611,6 @@ class MainFrame(LayoutFrame):
                 filepaths, filepaths_wref, self.basis_file_user, self.control_file_user, self.wm_file_user, self.gm_file_user, self.csf_file_user = pickle.load(f)
             self.MRSfiles.on_drop_files(filepaths)
             self.Waterfiles.on_drop_files(filepaths_wref)
-        
 
     def on_close(self, event):
         try: self.save_lastfiles()

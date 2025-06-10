@@ -27,6 +27,7 @@ class PlotFrame(wx.Frame):
         self.gaussian_checkbox.SetValue(False)
         self.text = wx.TextCtrl(self.rightPanel, wx.ID_ANY, "", style=wx.TE_READONLY | wx.TE_MULTILINE)
         self.text.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.NORMAL,wx.FONTWEIGHT_NORMAL, False))
+        self.text.Bind(wx.EVT_SET_FOCUS, lambda event: self.SetFocus()) # remove blinking cursor
 
         self.leftSizer = wx.BoxSizer(wx.VERTICAL)
         self.leftSizer.Add(self.canvas, 1, wx.EXPAND, 0)

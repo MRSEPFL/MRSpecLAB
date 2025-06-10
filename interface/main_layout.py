@@ -208,7 +208,7 @@ class LayoutFrame(wx.Frame):
         self.button_step_processing = BtmButtonNoBorder(self.player_panel, wx.ID_ANY, self.run_bmp)
         self.button_step_processing.SetBackgroundColour(wx.Colour(XISLAND2))
         self.button_step_processing.SetMinSize((-1, 100))
-        self.button_step_processing.SetToolTip("Run stepwise") 
+        self.button_step_processing.SetToolTip("Run stepwise")
         
         self.autorun_bmp = images.autorun_img.GetBitmap()
         self.pause_bmp = images.pause_img.GetBitmap()
@@ -220,9 +220,7 @@ class LayoutFrame(wx.Frame):
         self.nplot_bmp = images.nplot_img.GetBitmap()
         self.button_nplot = BtmButtonNoBorder(self.player_panel, wx.ID_ANY, self.nplot_bmp)
         self.button_nplot.SetBackgroundColour(wx.Colour(XISLAND2))
-        self.button_nplot.SetMinSize((-1,100))
-        #self.button_nplot.SetInitialSize((-1,))
-        #self.button_nplot.Fit()
+        self.button_nplot.SetMinSize((-1, 100))
         self.button_nplot.SetToolTip("Show plots")
         self.button_nplot.Disable()
 
@@ -243,21 +241,19 @@ class LayoutFrame(wx.Frame):
         button_sizer.Add(wx.StaticLine(self.right_panel, wx.ID_ANY, style=wx.LI_VERTICAL), 0, wx.ALL | wx.EXPAND, 5)
         button_sizer.Add(plot_sizer, 0, wx.ALL | wx.EXPAND, 0)
         button_sizer.Add(wx.StaticLine(self.right_panel, wx.ID_ANY, style=wx.LI_VERTICAL), 0, wx.ALL | wx.EXPAND, 5)
-        # button_sizer.Add(config_sizer, 0, wx.ALL | wx.EXPAND, 0)
         button_sizer.Add(debug_sizer, 0, wx.ALL | wx.EXPAND, 0)
         button_sizer.Add(batch_sizer, 0, wx.ALL | wx.EXPAND, 0)
         button_sizer.AddStretchSpacer(1)
         button_sizer.Add(self.player_panel, 0, wx.ALL | wx.EXPAND, 0)
         right_sizer.Add(button_sizer, 0, wx.ALL | wx.EXPAND, 0)
-        # Then add the batch_sizer to the overall button sizer.
-        # For example, if you are using button_sizer in a horizontal row:
 
-        
         self.matplotlib_canvas = MatplotlibCanvas(self.right_panel, wx.ID_ANY)
         self.info_text = wx.richtext.RichTextCtrl(text_splitter, wx.ID_ANY, "", style=wx.TE_READONLY | wx.TE_MULTILINE)
         self.file_text = wx.TextCtrl(text_splitter, wx.ID_ANY, "", style=wx.TE_READONLY | wx.TE_MULTILINE)
         font_fixed_width = wx.Font(9, wx.FONTFAMILY_TELETYPE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
         self.file_text.SetFont(font_fixed_width)
+        self.info_text.Bind(wx.EVT_SET_FOCUS, lambda event: self.SetFocus()) # remove blinking cursor
+        self.file_text.Bind(wx.EVT_SET_FOCUS, lambda event: self.SetFocus())
 
         right_sizer.Add(self.matplotlib_canvas, 1, wx.ALL | wx.EXPAND, 0)
         right_sizer.Add(self.matplotlib_canvas.toolbar, 0, wx.EXPAND, 0)
@@ -269,3 +265,4 @@ class LayoutFrame(wx.Frame):
         self.SetBackgroundColour(wx.Colour(XISLAND1))
 
         self.Layout()
+        self.Refresh()

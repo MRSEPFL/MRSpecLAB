@@ -2,9 +2,11 @@ wxpython
 suspect
 spec2nii
 matplotlib
-numpy<=1.23.5 # compatibility with suspect's import functions
+numpy<=1.23.5 # suspect compatibility (numpy types)
 antspyx
 gsnodegraph
 gswidgetkit
 pydicom
 pymapvbvd
+scikit-image
+scipy<=1.13.1 # mapvbvd compatibility (cumtrapz)

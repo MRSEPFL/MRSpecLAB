@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from interface import utils
 
-from skimage import measure
+# from skimage import measure
 
 from inout.read_coord import ReadlcmCoord, extract_reference
 
@@ -239,7 +239,7 @@ def create_brain_mask(slice_data):
     center_y = rows // 2
 
     # Detect boundaries in the binary image
-    boundaries = measure.find_contours(binary_image, level=0.5)
+    # boundaries = measure.find_contours(binary_image, level=0.5)
 
     # Initialize an empty mask with False (0) values
     mask = np.zeros_like(binary_image, dtype=bool)
