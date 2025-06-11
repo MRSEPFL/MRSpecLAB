@@ -8,5 +8,6 @@ gsnodegraph
 gswidgetkit
 pydicom
 pymapvbvd
-scikit-image
+# scikit-image
 scipy<=1.13.1 # mapvbvd compatibility (cumtrapz)
+nibabel
