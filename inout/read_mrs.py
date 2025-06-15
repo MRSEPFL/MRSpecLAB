@@ -15,7 +15,7 @@ def load_file(filepath):
     header = None
     ext = os.path.splitext(filepath)[-1][1:].lower()
     if ext == "ima":
-        data, header, _ = load_ima_from_suspect(filepath)
+        data, header = load_ima_from_suspect(filepath)
         
     elif ext == "dcm":
         data = load_dicom(filepath) # suspect's load_dicom doesn't work
@@ -210,36 +210,20 @@ def load_rda(filepath):
             CSIMatrix_Size[2] = int(line.split(':')[1].strip())
             header["CSIMatrix_Size[2]"] = CSIMatrix_Size[2]
             continue
-    
     utils.log_info(f"CSIMatrix_Size: {CSIMatrix_Size}")
-
-
-    if header["Nucleus"] == "1H":
-        ppm0 = 4.7
-    else:
-        ppm0 = 0
-    
+    ppm0 = 4.7 if header["Nucleus"] == "1H" else 0
     datamatrix = numpy.frombuffer(data, dtype=numpy.float64)
     utils.log_info(f"Shape of the datamatrix: {datamatrix.shape}")
 
-
-    # For CSI
-    if not (CSIMatrix_Size[0] == 1 and CSIMatrix_Size[1] == 1 and CSIMatrix_Size[2] == 1):
+    if not (CSIMatrix_Size[0] == 1 and CSIMatrix_Size[1] == 1 and CSIMatrix_Size[2] == 1): # CSI
         datamatrix = datamatrix[::2] + 1j * datamatrix[1::2]
         data = datamatrix.reshape(CSIMatrix_Size[0], CSIMatrix_Size[1], CSIMatrix_Size[2], vector_size)
         # data = numpy.squeeze(datamatrix)
-
-
-    else:       
-    # For SVS 
+    else: # SVS
         data = datamatrix[::2] + 1j * datamatrix[1::2]  
-    
-    utils.log_info(f"Shape of the data: {data.shape}")
-
-
     # assert data.size == vector_size
+    utils.log_info(f"Shape of the data: {data.shape}")
     return MRSData(data, dt, f0=f0, te=te, tr=tr, ppm0=ppm0), header
-
 
 def load_nifti(filepath):
     img: nibabel.nifti2.Nifti2Image = nibabel.load(filepath)
@@ -285,18 +269,12 @@ def load_nifti(filepath):
             dt = dt * 1e-6 # us to s
         else: dt = dt * 1e-3 # ms to s
 
-    try:
-        f0 = mrs_hdr_ext["SpectrometerFrequency"][0] # MHz
-    except:
-        utils.log_error("SpectrometerFrequency not found in header extension.")
-    try:
-        te = mrs_hdr_ext["EchoTime"] * 1e3 # s to ms
-    except:
-        utils.log_error("Echo time not found in header extension")
-    try:
-        tr = mrs_hdr_ext["RepetitionTime"] * 1e3 # s to ms
-    except:
-        utils.log_error("Repetition time time not found in header extension")
+    try: f0 = mrs_hdr_ext["SpectrometerFrequency"][0] # MHz
+    except: utils.log_error("SpectrometerFrequency not found in header extension.")
+    try: te = mrs_hdr_ext["EchoTime"] * 1e3 # s to ms
+    except: utils.log_error("Echo time not found in header extension")
+    try: tr = mrs_hdr_ext["RepetitionTime"] * 1e3 # s to ms
+    except: utils.log_error("Repetition time time not found in header extension")
 
     header = {}
     header["Nucleus"] = mrs_hdr_ext["ResonantNucleus"][0]
@@ -320,4 +298,4 @@ def load_ima_from_suspect(filepath):
             nucleus = header[key]
             if nucleus != "1H":
                 data.ppm0 = 0
-    return data, header, _
+    return data, header
