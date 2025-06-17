@@ -1,4 +1,4 @@
-import wx
+import wx, os
 from datetime import datetime
 from .colours import INFO_COLOR, WARNING_COLOR, ERROR_COLOR, DEBUG_COLOR
 
@@ -20,6 +20,9 @@ larmor_frequencies = {
     "13C": 10.7084,
     "19F": 40.078
 }
+
+def iswindows(): return os.name == 'nt'
+def islinux(): return os.name == 'posix'
 
 myEVT_LOG = wx.NewEventType()
 EVT_LOG = wx.PyEventBinder(myEVT_LOG, 1)

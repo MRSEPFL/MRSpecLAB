@@ -5,6 +5,7 @@ from scipy.optimize import curve_fit
 from inout.read_mrs import load_file
 from inout.read_coord import ReadlcmCoord
 from nodes._CoilCombinationAdaptive import coil_combination_adaptive
+from interface import utils
 
 def plot_mrs(data, figure, title=None, fit_gaussian=False):
     if isinstance(data, MRSData): data = [data]
@@ -99,13 +100,13 @@ def plot_coord(lcmdata, figure, title=None):
     if isinstance(lcmdata, str):
         filepath = lcmdata
         if filepath == "" or not os.path.exists(filepath):
-            print("Invalid filepath provided.")
+            utils.log_error("Invalid filepath provided: " + filepath)
             return
         lcmdata = ReadlcmCoord(filepath)
         if title is None:
             title = filepath
     elif not isinstance(lcmdata, dict):
-        print("Invalid lcmdata format.")
+        utils.log_error("Invalid lcmdata format.")
         return
     if title is None:
         title = ".coord file"
@@ -145,7 +146,7 @@ def plot_coord(lcmdata, figure, title=None):
     if 'subspec' in lcmdata and 'metab' in lcmdata and lcmdata['subspec'] and lcmdata['metab']:
         for metab, subspec in zip(lcmdata['metab'], lcmdata['subspec']):
             if len(subspec) != len(lcmdata['ppm']):
-                print(f"Subspectra length mismatch for metabolite '{metab}'. Skipping.")
+                utils.log_warning(f"Subspectra length mismatch for metabolite '{metab}'. Skipping.")
                 continue
             padding = (max(subspec) - min(subspec)) * 0.1 if subspec else 0
             offset += getOffset(subspec, lcmdata['baseline']) + padding

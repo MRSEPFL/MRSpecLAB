@@ -1,5 +1,6 @@
 import math
 import numpy as np
+from interface import utils
 
 def add_calculated_metabolites(lcmdata):
     """
@@ -28,7 +29,7 @@ def add_calculated_metabolites(lcmdata):
     # Ensure all required metabolites were found
     if None in (PCr, Pi, aATP, bATP, gATP, PiEX):
         # If any of the required values is missing, skip calculation
-        print("Warning: Not all required metabolites were found for additional 31P calculations.")
+        utils.log_warning("Not all required metabolites were found for additional 31P calculations.")
         return
 
     # Define basis (offset) values as in the MATLAB code
@@ -56,7 +57,7 @@ def add_calculated_metabolites(lcmdata):
     try:
         PH = pKA + math.log10((CS_Pi - delta_a) / (delta_b - CS_Pi))
     except Exception as e:
-        print("Error computing PH:", e)
+        utils.log_warning("Error computing PH:", e)
         PH = None
 
     # Calculate MGmm (Mg concentration in mM) using CS_bATP and CS_PCr.
@@ -67,14 +68,14 @@ def add_calculated_metabolites(lcmdata):
         inner = (4.24 - math.log10(numerator / denominator))
         MGmm = math.pow(10, -inner) * 1000
     except Exception as e:
-        print("Error computing MGmm:", e)
+        utils.log_warning("Error computing MGmm:", e)
         MGmm = None
 
     # Calculate PiEX_conc using the corrected chemical shift of PiEX.
     try:
         PiEX_conc = pKA + math.log10((CS_PiEX - delta_a) / (delta_b - CS_PiEX))
     except Exception as e:
-        print("Error computing PiEX_conc:", e)
+        utils.log_warning("Error computing PiEX_conc:", e)
         PiEX_conc = None
 
     # Append the calculated values to the LCModel concentration list
@@ -110,7 +111,7 @@ def add_calculated_metabolites(lcmdata):
     # Use the ppm axis from lcmdata
     ppm = np.array(lcmdata.get('ppm', []))
     if ppm.size == 0:
-        print("No ppm data available to generate synthetic subspectra.")
+        utils.log_error("No ppm data available to generate synthetic subspectra.")
         return
 
     # Use the measured spectrum to set a base amplitude
@@ -146,4 +147,4 @@ def add_calculated_metabolites(lcmdata):
     lcmdata.setdefault('metab', []).append('PiEX_conc')
     lcmdata['nfit'] += 1
 
-    print("Calculated metabolites added: PH, MGmm, PiEX_conc")
+    # utils.log_debug("Calculated metabolites added: PH, MGmm, PiEX_conc")

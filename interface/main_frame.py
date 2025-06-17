@@ -141,7 +141,7 @@ class MainFrame(LayoutFrame):
         self.Bind(wx.EVT_BUTTON, self.on_open_external_nodes, self.extenal_nodes)
         self.Bind(wx.EVT_BUTTON, self.on_change_output, self.change_output_button)
         self.Bind(wx.EVT_BUTTON, self.on_open_fitting, self.fitting_button)
-        self.Bind(wx.EVT_TOGGLEBUTTON, self.on_show_debug, self.show_debug_button)
+        # self.Bind(wx.EVT_TOGGLEBUTTON, self.on_show_debug, self.show_debug_button)
         self.Bind(wx.EVT_CHECKBOX, self.on_toggle_debug, self.debug_button)
         self.Bind(wx.EVT_BUTTON, self.on_reload, self.reload_button)
         self.Bind(wx.EVT_COMBOBOX, self.on_plot_box_selection)
@@ -154,7 +154,7 @@ class MainFrame(LayoutFrame):
         self.Bind(wx.EVT_BUTTON, self.on_reset, self.button_terminate_processing)
         self.Bind(wx.EVT_BUTTON, self.on_open_metabolite_map_plot, self.button_nplot)
 
-        self.on_show_debug(None)
+        # self.on_show_debug(None)
         self.reset()
 
     def on_reset(self, event=None):
@@ -281,8 +281,16 @@ class MainFrame(LayoutFrame):
             utils.log_info(f"Image file is not set.")
 
     def on_open_output_folder(self, event):
-        if os.path.exists(self.outputpath):
-            os.startfile(self.outputpath)
+        if not os.path.exists(self.outputpath):
+            return utils.log_error(f"Output folder does not yet exist: {self.outputpath}")
+        if utils.iswindows(): os.startfile(self.outputpath)
+        elif utils.islinux():
+            try:
+                import subprocess
+                wsl_distro = os.environ.get("WSL_DISTRO_NAME", False)
+                if not wsl_distro: subprocess.run(['xdg-open', self.outputpath], check=True) # native Linux
+                else: subprocess.run(['explorer.exe', "\\\\wsl$\\" + wsl_distro + self.outputpath.replace("/", "\\")], check=True) # WSL
+            except Exception as e: utils.log_error(f"Could not open output folder: {e}")
         event.Skip()
 
     def on_open_pipeline(self, event):
@@ -375,17 +383,16 @@ class MainFrame(LayoutFrame):
         self.fitting_frame.Show()
         event.Skip()
     
-    def on_show_debug(self, event):
-        if self.show_debug_button.GetValue():
-            self.debug_button.Show()
-            self.reload_button.Show()
-            self.show_debug_button.SetLabel("Hide debug options")
-        else:
-            self.debug_button.Hide()
-            self.reload_button.Hide()
-            self.show_debug_button.SetLabel("Show debug options")
-        self.Layout()
-        if event is not None: event.Skip()
+    # def on_show_debug(self, event):
+    #     temp = self.show_debug_button.GetValue()
+    #     self.debug_button.Show(temp)
+    #     self.reload_button.Show(temp)
+    #     self.debug_button.Raise()
+    #     self.reload_button.Raise()
+    #     self.right_panel.Lower()
+    #     self.show_debug_button.SetLabel(("Hide" if temp else "Show") + " debug options")
+    #     self.Layout()
+    #     if event is not None: event.Skip()
 
     def on_toggle_debug(self, event):
         utils.set_debug(self.debug_button.GetValue())

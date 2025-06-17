@@ -550,7 +550,7 @@ class Table():
 	def __init__(self):
 		
 		if getattr(sys, 'frozen', False): 													# Determine if Executable or Command Line
-			print('Inside executable')
+			# print('Inside executable')
 			# self.cwd = os.path.dirname(sys.executable) 										# Executable
 			self.cwd = os.path.abspath(os.path.dirname(__file__))
 

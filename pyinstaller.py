@@ -1,6 +1,6 @@
-import PyInstaller.__main__
+import os
 import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)
-import platform
+import PyInstaller.__main__
 
 options = [
     'MRSpecLAB.py',
@@ -20,13 +20,15 @@ options = [
     '--hidden-import', 'wx',
     '--hidden-import', 'wx._xml',
     '--hidden-import', 'wx.core',
+    '--hidden-import', 'matplotlib.backends.backend_pdf',
+    '--hidden-import', 'matplotlib.backends.backend_svg',
     # exclude
     '--exclude-module', 'cv2',
     '--exclude-module', 'babel',
     '--exclude-module', 'PyQt5',
 ]
 
-if platform.system() == 'Linux':
+if os.name == 'posix':
 	options += [
 	    '--add-binary', '/usr/lib/x86_64-linux-gnu/libtiff.so.5:.'
 	]

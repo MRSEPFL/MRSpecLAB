@@ -1,11 +1,9 @@
-import wx
+import wx, os, sys, shutil, zipfile, time, subprocess
 import numpy as np
-import os, sys, shutil, zipfile, time, subprocess
 import matplotlib
 import ants
 import datetime
 import traceback
-import subprocess
 # import re
 
 from interface import utils
@@ -210,7 +208,6 @@ def processStep(self, step, nstep):
         if not os.path.exists(steppath): os.mkdir(steppath)
         filepath = os.path.join(steppath, "data")
         if not os.path.exists(filepath): os.mkdir(filepath)
-        print("test1")
         for i, d in enumerate(dataDict["output"]): 
             if d is None: continue
             save_raw(os.path.join(filepath, str(i) + ".RAW"), d, seq=self.sequence)
@@ -219,7 +216,6 @@ def processStep(self, step, nstep):
             if d is None: continue
             save_raw(os.path.join(filepath, "wref_" + str(i) + ".RAW"), d, seq=self.sequence)
             save_nifti(os.path.join(filepath, "wref_" + str(i) + ".nii"), d, seq=self.sequence)
-        print("test2")
 
     # canvas plot
     if not self.fast_processing:
@@ -421,7 +417,7 @@ def analyseResults(self):
 
     # Create work folder and copy LCModel executable
     lcmodelfile = os.path.join(self.programpath, "lcmodel", "lcmodel")  # Linux exe
-    if os.name == 'nt': lcmodelfile += ".exe"  # Windows exe
+    if utils.iswindows(): lcmodelfile += ".exe"  # Windows exe
 
     utils.log_debug("Looking for executable here: ", lcmodelfile)
     if not os.path.exists(lcmodelfile):
@@ -439,6 +435,9 @@ def analyseResults(self):
             utils.log_error(f"Failed to extract lcmodel from zip: {e}")
             return False
 
+    # Ensure executable permissions on Linux
+    if utils.islinux(): os.chmod(lcmodelfile, 0b111000000)
+    
     # Setup workpath
     workpath = os.path.join(os.path.dirname(self.outputpath_base), "temp")
     if os.path.exists(workpath): shutil.rmtree(workpath)
@@ -446,9 +445,9 @@ def analyseResults(self):
     utils.log_debug("LCModel work folder: ", workpath)
 
     # Copy LCModel executable to workpath
-    if os.name == 'nt': command = f"""copy "{lcmodelfile}" "{workpath}" """
+    if utils.iswindows(): command = f"""copy "{lcmodelfile}" "{workpath}" """
     else: command = f"""cp "{lcmodelfile}" "{workpath}" """
-    result_copy = subprocess.run(command, shell=True, capture_output=True, text=True)
+    result_copy = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
     utils.log_debug(f"Copy command output:\n{result_copy.stdout}")
     if result_copy.stderr:
         utils.log_warning(f"Copy command errors:\n{result_copy.stderr}")
@@ -467,16 +466,14 @@ def analyseResults(self):
     def processVoxel(result, label):
         """Process a single voxel for LCModel fitting."""
         label = "lcm" if label == "0" else label
-
         result_label_np = np.array(result)
-        utils.log_info(f"shape of result {label}: {result_label_np.shape}")
-
+        utils.log_debug(f"shape of result {label}: {result_label_np.shape}")
         rparams = {}
         for key in ["Nucleus", "nucleus"]:
-            if key in self.header.keys():
+            # if key in self.header.keys():
                 rparams = {
                     "KEY": 123456789,
-                    "FILRAW": f"./{label}.raw",
+                    "FILRAW": f"./{label}.RAW",
                     "FILBAS": self.basis_file,
                     "FILPRI": f"./{label}.print",
                     "FILTAB": f"./{label}.table",
@@ -495,7 +492,7 @@ def analyseResults(self):
 
                 if wresult is not None:
                     rparams.update({
-                        "FILH2O": f"./{label}.h2o",
+                        "FILH2O": f"./{label}.H2O",
                         "DOWS": "EddyCurrentCorrection" not in self.pipeline  # Use water ref correction if appropriate.
                     })
                     if wconc is not None:
@@ -529,42 +526,35 @@ def analyseResults(self):
                 save_raw(base_path + ".H2O", wresult, seq=self.sequence)
                 save_nifti(base_path + ".water.nii", wresult, seq=self.sequence)
         except Exception as e:
-            utils.log_error(f"Error writing CONTROL or RAW files for {label}: {e}")
-            return
+            return utils.log_error(f"Error writing CONTROL or RAW files for {label}: {e}")
 
         # Run LCModel
-        if os.name == 'nt': command = f"""cd "{workpath}" & lcmodel.exe < {label}.CONTROL"""
+        if utils.iswindows(): command = f"""cd "{workpath}" & lcmodel.exe < {label}.CONTROL"""
         else: command = f"""cd "{workpath}" && ./lcmodel < {label}.CONTROL"""
         utils.log_info(f"Running LCModel for {label}...")
         utils.log_debug("\n\t" + command)
 
         try:
-            result_lcmodel = subprocess.run(command, shell=True, capture_output=True, text=True)
+            result_lcmodel = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
             utils.log_debug(f"LCModel Output for {label}:\n{result_lcmodel.stdout}")
-            utils.log_debug(f"LCModel Errors for {label}:\n{result_lcmodel.stderr}")
-
+            utils.log_info(f"LCModel Errors for {label}:\n{result_lcmodel.stderr}")
             expected_files = [f"{label}.table", f"{label}.ps", f"{label}.coord", f"{label}.csv"]
             missing_files = [f for f in expected_files if not os.path.exists(os.path.join(workpath, f))]
             if missing_files: utils.log_error(f"Missing LCModel output files for {label}: {missing_files}")
-        except Exception as e:
-            utils.log_error(f"LCModel execution failed for {label}: {e}")
-            return
+        except Exception as e: return utils.log_error(f"LCModel execution failed for {label}: {e}")
 
         if result_lcmodel.returncode != 0:
-            utils.log_error(f"LCModel failed for {label} with return code {result_lcmodel.returncode}")
-            return        
+            return utils.log_error(f"LCModel failed for {label} with return code {result_lcmodel.returncode}")
 
         # Move output files to savepath
         savepath = os.path.join(lcmodelsavepath, label)
         try: os.mkdir(savepath)
-        except Exception as e:
-            utils.log_error(f"Failed to create savepath for {label}: {e}")
-            return
+        except Exception as e: return utils.log_error(f"Failed to create savepath for {label}: {e}")
 
         command_move = ""
         for f in os.listdir(workpath):
             if "lcmodel" in f.lower(): continue
-            if os.name == 'nt': command_move += f""" & move "{os.path.join(workpath, f)}" "{savepath}" """
+            if utils.iswindows(): command_move += f""" & move "{os.path.join(workpath, f)}" "{savepath}" """
             else: command_move += f""" && mv "{os.path.join(workpath, f)}" "{savepath}" """
 
         if command_move:

@@ -1,8 +1,8 @@
 import processing.api as api
-import numpy as np
-import interface.utils as utils
-from scipy.optimize import differential_evolution, minimize, dual_annealing, leastsq
 import copy
+import numpy as np
+from scipy.optimize import differential_evolution, minimize, dual_annealing, leastsq
+import interface.utils as utils
 
 class PhaseAlignment31P(api.ProcessingNode):
     def __init__(self, nodegraph, id):
@@ -183,7 +183,7 @@ class PhaseAlignment31P(api.ProcessingNode):
                 refined_solution = result_nm.x
                 obj_value = entropy_objective(refined_solution, data_obj, m, c)
                 solutions.append((refined_solution, obj_value))
-                print(f"Run {seed}: phc0={refined_solution[0]:.4f}, phc1={refined_solution[1]:.4f}, obj={obj_value:.6f}")
+                utils.log_debug(f"Run {seed}: phc0={refined_solution[0]:.4f}, phc1={refined_solution[1]:.4f}, obj={obj_value:.6f}")
             
             theoretical_candidate = (-82,0.0021991148575128553)
 
@@ -196,13 +196,13 @@ class PhaseAlignment31P(api.ProcessingNode):
             refined_theo = result_theo.x
             obj_theo = entropy_objective(refined_theo, data_obj, m, c)
             solutions.append((refined_theo, obj_theo))
-            print(f"Theoretical candidate refined: phc0 = {refined_theo[0]:.4f}, phc1 = {refined_theo[1]:.10f}, obj = {obj_theo:.6f}")
+            utils.log_debug(f"Theoretical candidate refined: phc0 = {refined_theo[0]:.4f}, phc1 = {refined_theo[1]:.10f}, obj = {obj_theo:.6f}")
 
             # Select the best candidate among all runs.
             best_solution, best_obj = min(solutions, key=lambda x: x[1])
-            print("Best overall solution:")
-            print("  0th order phase: {:.4f} degrees".format(best_solution[0]))
-            print("  1st order phase: {:.4f}".format(best_solution[1]))
+            utils.log_debug("Best overall solution:")
+            utils.log_debug("  0th order phase: {:.4f} degrees".format(best_solution[0]))
+            utils.log_debug("  1st order phase: {:.4f}".format(best_solution[1]))
             return best_solution
         
         def phase_correction_automics(data_obj, threshold=0.001, min_interval=15, max_interval_fraction=0.05, amp_frac=0.1):
@@ -309,11 +309,11 @@ class PhaseAlignment31P(api.ProcessingNode):
             phi0_deg = np.rad2deg(phi0)
             phi0_wrapped = ((phi0_deg + 180) % 360) - 180
             
-            print("Automics (filtered):")
-            print("  L1 =", L1, "L2 =", L2, "k1 =", k1, "k2 =", k2)
-            print("  ph1 =", ph1, "ph2 =", ph2)
-            print("  phi0 (rad) =", phi0, "phi0 (deg) =", phi0_deg, "wrapped =", phi0_wrapped)
-            print("  phi1 =", phi1)
+            utils.log_debug("Automics (filtered):")
+            utils.log_debug("  L1 =", L1, "L2 =", L2, "k1 =", k1, "k2 =", k2)
+            utils.log_debug("  ph1 =", ph1, "ph2 =", ph2)
+            utils.log_debug("  phi0 (rad) =", phi0, "phi0 (deg) =", phi0_deg, "wrapped =", phi0_wrapped)
+            utils.log_debug("  phi1 =", phi1)
             
             return phi0_wrapped, phi1
 
@@ -404,11 +404,11 @@ class PhaseAlignment31P(api.ProcessingNode):
                 if objective(theoretical_candidate, data_obj, region_indices_pcr, region_indices_atp, weight_pcr, weight_atp) < best_de_obj:
                     best_de_params = theoretical_candidate
                     best_de_obj = objective(theoretical_candidate, data_obj, region_indices_pcr, region_indices_atp, weight_pcr, weight_atp)
-                    print("Theoretical candidate adopted:", theoretical_candidate)
+                    utils.log_debug("Theoretical candidate adopted:", theoretical_candidate)
             
-            print("Best DE result before local refinement:")
-            print("  0th order phase: {:.4f}".format(best_de_params[0]))
-            print("  1st order phase: {:.8f}".format(best_de_params[1]))
+            utils.log_debug("Best DE result before local refinement:")
+            utils.log_debug("  0th order phase: {:.4f}".format(best_de_params[0]))
+            utils.log_debug("  1st order phase: {:.8f}".format(best_de_params[1]))
             
             # Refine the best DE result using a local optimizer.
             result_local = minimize(
@@ -418,9 +418,9 @@ class PhaseAlignment31P(api.ProcessingNode):
             )
             
             best_params = result_local.x
-            print("Optimized parameters after local refinement:")
-            print("  0th order phase: {:.4f}".format(best_params[0]))
-            print("  1st order phase: {:.8f}".format(best_params[1]))
+            utils.log_debug("Optimized parameters after local refinement:")
+            utils.log_debug("  0th order phase: {:.4f}".format(best_params[0]))
+            utils.log_debug("  1st order phase: {:.8f}".format(best_params[1]))
             
             return best_params[0], best_params[1]
 
@@ -568,7 +568,7 @@ class PhaseAlignment31P(api.ProcessingNode):
             
             ppm_bounds = self.get_parameter("freqRange")[:-1]  # e.g. (lower, upper)
             lower_bound_ppm, upper_bound_ppm = ppm_bounds
-            print("PPM bounds: ", ppm_bounds)
+            # print("PPM bounds: ", ppm_bounds)
             
             header = data["header"]
             xdim = header["CSIMatrix_Size[0]"]
@@ -595,7 +595,7 @@ class PhaseAlignment31P(api.ProcessingNode):
                             highest_spec_area_id = (ix, iy, iz)
                             highest_spec_area = spec_area
                             target_voxel = d
-                            print("spec area:", highest_spec_area)
+                            # print("spec area:", highest_spec_area)
             
             # --- Get best phase parameters from the target voxel ---
             best_phase_deg, best_1p = peak_max_phase_correction(

@@ -54,7 +54,7 @@ class LayoutFrame(wx.Frame):
     def __init__(self, *args, **kwds):
         kwds["style"] = kwds.get("style", 0) | wx.DEFAULT_FRAME_STYLE
         wx.Frame.__init__(self, *args, **kwds)
-        self.SetSize((1200, 800))
+        self.SetSize((1400, 800))
         self.SetTitle("MRSpecLAB")
         #self.SetIcon(images.icon_img_32.GetIcon())
         font1 = wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.NORMAL,wx.FONTWEIGHT_NORMAL, False)
@@ -93,13 +93,18 @@ class LayoutFrame(wx.Frame):
         self.left_panel.SetMinSize((cibm_bmp.GetSize().x, -1))
         
         ### WINDOW BUTTONS ###
-        folder_bmp = images.folder_img.GetBitmap().ConvertToImage().Rescale(50, 50).ConvertToBitmap()
+        small_bmp_height = 50
+        folder_bmp = images.folder_img.GetBitmap().ConvertToImage()
+        folder_bmp_width = int(folder_bmp.GetWidth() * (small_bmp_height / folder_bmp.GetHeight()))
+        folder_bmp = folder_bmp.Rescale(folder_bmp_width, small_bmp_height).ConvertToBitmap()
         self.folder_button = BtmButtonNoBorder(self.right_panel, wx.ID_ANY, folder_bmp)
         self.folder_button.SetBackgroundColour(wx.Colour(XISLAND1))
         self.folder_button.SetMinSize((50, 50))
         self.folder_button.SetToolTip("Open output folder")
 
-        pipeline_bmp = images.pipeline_img.GetBitmap().ConvertToImage().Rescale(50, 50).ConvertToBitmap()
+        pipeline_bmp = images.pipeline_img.GetBitmap().ConvertToImage()
+        pipeline_bmp_width = int(pipeline_bmp.GetWidth() * (small_bmp_height / pipeline_bmp.GetHeight()))
+        pipeline_bmp = pipeline_bmp.Rescale(pipeline_bmp_width, small_bmp_height).ConvertToBitmap()
         self.pipeline_button = BtmButtonNoBorder(self.right_panel, wx.ID_ANY, pipeline_bmp)
         self.pipeline_button.SetBackgroundColour(wx.Colour(XISLAND1))
         self.pipeline_button.SetMinSize((50, 50))
@@ -135,7 +140,7 @@ class LayoutFrame(wx.Frame):
         plot_sizer.Add(self.plot_box, 0, wx.ALL | wx.ALIGN_CENTER, 0)
 
         ### DEBUG BUTTONS ###
-        self.extenal_nodes = ButtonNoBorder(self.right_panel, wx.ID_ANY, "Customer nodes library", style=wx.BORDER_NONE | wx.BU_LEFT)
+        self.extenal_nodes = ButtonNoBorder(self.right_panel, wx.ID_ANY, "Change customer nodes folder", style=wx.BORDER_NONE | wx.BU_LEFT)
         self.extenal_nodes.SetBackgroundColour(wx.Colour(XISLAND1))
         self.extenal_nodes.SetMinSize((-1, 25))
         self.extenal_nodes.SetToolTip("Select a folder for the customer nodes library")
@@ -150,31 +155,37 @@ class LayoutFrame(wx.Frame):
         self.fitting_button.SetMinSize((-1, 25))
         self.fitting_button.SetToolTip("Show fitting options for LCModel")
 
-        self.show_debug_button = ToggleButtonNoBorder(self.right_panel, wx.ID_ANY, "Show debug options", style=wx.BORDER_NONE | wx.BU_LEFT)
-        self.show_debug_button.SetBackgroundColour(wx.Colour(XISLAND1))
-        self.show_debug_button.SetValue(False)
-        self.show_debug_button.SetMinSize((-1, 25))
-        self.show_debug_button.SetToolTip("Show debug options")
+        # self.show_debug_button = ToggleButtonNoBorder(self.right_panel, wx.ID_ANY, "Show debug options", style=wx.BORDER_NONE | wx.BU_LEFT)
+        # self.show_debug_button.SetBackgroundColour(wx.Colour(XISLAND1))
+        # self.show_debug_button.SetValue(False)
+        # self.show_debug_button.SetMinSize((-1, 25))
+        # self.show_debug_button.SetToolTip("Show debug options")
 
-        self.debug_button = wx.CheckBox(self.right_panel, wx.ID_ANY, "Log debug messages", style=wx.BORDER_NONE | wx.BU_LEFT)
-        self.debug_button.SetBackgroundColour(wx.Colour(XISLAND2))
+        self.debug_button = wx.CheckBox(self.right_panel, wx.ID_ANY, "Debug log", style=wx.BORDER_NONE | wx.BU_LEFT)
+        self.debug_button.SetBackgroundColour(wx.Colour(XISLAND1))
         self.debug_button.SetMinSize((-1, 25))
         self.debug_button.SetToolTip("Write debug information in the log window")
 
-        self.reload_button = ButtonNoBorder(self.right_panel, wx.ID_ANY, "Rescan node folder", style=wx.BORDER_NONE | wx.BU_LEFT)
-        self.reload_button.SetBackgroundColour(wx.Colour(XISLAND2))
+        self.reload_button = ButtonNoBorder(self.right_panel, wx.ID_ANY, "Rescan nodes", style=wx.BORDER_NONE | wx.BU_LEFT)
+        self.reload_button.SetBackgroundColour(wx.Colour(XISLAND1))
         self.reload_button.SetMinSize((-1, 25))
         self.reload_button.SetToolTip("Reload all nodes from the node folder; only useful when running the Python source code")
+
+        debug_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        debug_sizer2.Add(self.debug_button, 0, wx.ALL | wx.EXPAND, 0)
+        debug_sizer2.Add(wx.StaticLine(self.right_panel, wx.ID_ANY, style=wx.LI_VERTICAL), 0, wx.ALL | wx.EXPAND, 2)
+        debug_sizer2.Add(self.reload_button, 0, wx.ALL | wx.EXPAND, 0)
 
         debug_sizer = wx.BoxSizer(wx.VERTICAL)
         debug_sizer.Add(self.extenal_nodes, 0, wx.ALL | wx.EXPAND, 0)
         debug_sizer.Add(self.change_output_button, 0, wx.ALL | wx.EXPAND, 0)
         debug_sizer.Add(self.fitting_button, 0, wx.ALL | wx.EXPAND, 0)
-        debug_sizer.Add(self.show_debug_button, 0, wx.ALL | wx.EXPAND, 0)
-        debug_sizer.Add(self.debug_button, 0, wx.ALL | wx.EXPAND, 0)
-        debug_sizer.Add(self.reload_button, 0, wx.ALL | wx.EXPAND, 0)
+        debug_sizer.Add(debug_sizer2, 0, wx.ALL | wx.EXPAND, 0)
+        # debug_sizer.Add(self.show_debug_button, 0, wx.ALL | wx.EXPAND, 0)
+        # debug_sizer.Add(self.debug_button, 0, wx.ALL | wx.EXPAND, 0)
+        # debug_sizer.Add(self.reload_button, 0, wx.ALL | wx.EXPAND, 0)
 
-        # --- BATCH PROCESSING BUTTONS (NEW) ---
+        # --- BATCH PROCESSING BUTTONS ---
         self.create_batch_button = ButtonNoBorder(self.right_panel, wx.ID_ANY, "Create batch folder system", style=wx.BORDER_NONE)
         self.create_batch_button.SetBackgroundColour(wx.Colour(XISLAND1))
         self.create_batch_button.SetMinSize((-1, 25))
@@ -190,13 +201,10 @@ class LayoutFrame(wx.Frame):
         self.run_batch_toggle.SetMinSize((-1, 25))
         self.run_batch_toggle.SetToolTip("Toggle batch mode processing")
 
-        # Create a sizer for these new buttons.
         batch_sizer = wx.BoxSizer(wx.VERTICAL)
-        batch_sizer.Add(self.create_batch_button, 0, wx.ALL | wx.EXPAND, 2)
-        batch_sizer.Add(self.load_batch_button, 0, wx.ALL | wx.EXPAND, 2)
-        batch_sizer.Add(self.run_batch_toggle, 0, wx.ALL | wx.EXPAND, 2)
-
-        
+        batch_sizer.Add(self.create_batch_button, 0, wx.ALL | wx.EXPAND, 0)
+        batch_sizer.Add(self.load_batch_button, 0, wx.ALL | wx.EXPAND, 0)
+        batch_sizer.Add(self.run_batch_toggle, 0, wx.ALL | wx.EXPAND, 0)
 
         ### PLAYER BUTTONS ###
         self.player_panel = wx.Panel(self.right_panel, wx.ID_ANY)
@@ -242,6 +250,7 @@ class LayoutFrame(wx.Frame):
         button_sizer.Add(plot_sizer, 0, wx.ALL | wx.EXPAND, 0)
         button_sizer.Add(wx.StaticLine(self.right_panel, wx.ID_ANY, style=wx.LI_VERTICAL), 0, wx.ALL | wx.EXPAND, 5)
         button_sizer.Add(debug_sizer, 0, wx.ALL | wx.EXPAND, 0)
+        button_sizer.Add(wx.StaticLine(self.right_panel, wx.ID_ANY, style=wx.LI_VERTICAL), 0, wx.ALL | wx.EXPAND, 5)
         button_sizer.Add(batch_sizer, 0, wx.ALL | wx.EXPAND, 0)
         button_sizer.AddStretchSpacer(1)
         button_sizer.Add(self.player_panel, 0, wx.ALL | wx.EXPAND, 0)
