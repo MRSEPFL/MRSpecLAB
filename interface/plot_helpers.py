@@ -4,7 +4,6 @@ from suspect import MRSData
 from scipy.optimize import curve_fit
 from inout.read_mrs import load_file
 from inout.read_coord import ReadlcmCoord
-from nodes._CoilCombinationAdaptive import coil_combination_adaptive
 from interface import utils
 
 def plot_mrs(data, figure, title=None, fit_gaussian=False):
@@ -49,7 +48,9 @@ def get_mrs_info(data):
     info += f"\n\tNumber of coils: {data[0].shape[0] if len(data[0].shape) > 1 else 1}"
     if "ave_per_rep" in f.metadata:
         info += f"\n\tNumber of shots per average: {f.metadata['ave_per_rep']}"
-    info += f"\n\tNumber of averages: {len(data)} → {len(data) / f.metadata['ave_per_rep']}"
+    info += f"\n\tNumber of averages: {len(data)}"
+    if "ave_per_rep" in f.metadata:
+        info += "→ {len(data) / f.metadata['ave_per_rep']}"
     info += "\n"
     if hasattr(f, "f0"): info += f"\n\tScanner frequency (MHz): {f.f0}"
     if hasattr(f, "dt"): info += f"\n\tDwell time (s): {f.dt}"
@@ -182,12 +183,10 @@ def read_file(filepath, canvas, text, coil_combine=False, fit_gaussian=False):
         plot_coord(f, canvas.figure, title=filepath)
     else:
         f, _, _, _= load_file(filepath)
-        try:
-            text.SetValue(f"File: {filepath}\n{get_mrs_info(f)}")
-        except:
-            pass
+        text.SetValue(f"File: {filepath}\n{get_mrs_info(f)}")
         if coil_combine: 
             if len(f[0].shape) > 1:
+                from nodes._CoilCombinationAdaptive import coil_combination_adaptive
                 d = {"input": f, "output": []}
                 coil_combination_adaptive(d)
                 f = d["output"]

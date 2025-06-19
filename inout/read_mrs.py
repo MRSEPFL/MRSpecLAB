@@ -16,7 +16,6 @@ def load_file(filepath):
     ext = os.path.splitext(filepath)[-1][1:].lower()
     if ext == "ima":
         data, header = load_ima_from_suspect(filepath)
-        
     elif ext == "dcm":
         data = load_dicom(filepath) # suspect's load_dicom doesn't work
         header, _ = DataReaders().siemens_ima(filepath, None)
@@ -35,8 +34,8 @@ def load_file(filepath):
     elif ext == "nii" or filepath.endswith(".nii.gz"):
         data, header = load_nifti(filepath) # no nii in DataReaders
         ext = "nii"
-    else:
-        return None, None, None, None
+    else: return None, None, None, None
+    utils.log_debug(f"Header for {filepath}: {header}")
     vendor = None
     if ext in ["ima", "dat"]: vendor = "siemens"
     elif ext == "sdat": vendor = "philips"
