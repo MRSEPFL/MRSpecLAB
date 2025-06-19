@@ -1,4 +1,5 @@
 import wx, os
+import threading
 from datetime import datetime
 from .colours import INFO_COLOR, WARNING_COLOR, ERROR_COLOR, DEBUG_COLOR
 
@@ -45,21 +46,26 @@ def set_debug(_debug):
     global debug
     debug = _debug
 
-def log_text( colour, *args):
-        if not text_dst: return
-        text = ""
-        for arg in args: text += str(arg)
-        evt = LogEvent(myEVT_LOG, -1, text=text, colour=colour)
-        wx.PostEvent(text_dst, evt)
+text_dst_lock = threading.Lock()
+def log_text(colour, *args):
+    if not text_dst: return
+    text = ""
+    for arg in args: text += str(arg)
+    evt = LogEvent(myEVT_LOG, -1, text=text, colour=colour)
+    wx.PostEvent(text_dst, evt)
 
 def on_log(event):
-    text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")+": " + event.GetText()
-    text_dst.BeginTextColour(event.GetColour())
-    text_dst.WriteText(text)
-    text_dst.EndTextColour()
-    text_dst.Newline()
-    text_dst.SetScrollPos(wx.VERTICAL, text_dst.GetScrollRange(wx.VERTICAL))
-    text_dst.ShowPosition(text_dst.GetLastPosition())
+    def do_log():
+        text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")+": " + event.GetText()
+        with text_dst_lock:
+            text_dst.BeginTextColour(event.GetColour())
+            text_dst.WriteText(text)
+            text_dst.EndTextColour()
+            text_dst.Newline()
+            text_dst.SetScrollPos(wx.VERTICAL, text_dst.GetScrollRange(wx.VERTICAL))
+            text_dst.ShowPosition(text_dst.GetLastPosition())
+    if wx.IsMainThread(): do_log()
+    else: wx.CallAfter(do_log)
     event.Skip()
 
 def log_info(*args):

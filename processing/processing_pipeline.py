@@ -4,7 +4,7 @@ import matplotlib
 import ants
 import datetime
 import traceback
-# import re
+import threading
 
 from interface import utils
 from inout.read_mrs import load_file
@@ -12,6 +12,16 @@ from inout.read_coord import ReadlcmCoord
 from inout.read_header import Table
 from inout.io_lcmodel import save_raw, read_control, save_control, save_nifti
 from interface.plot_helpers import plot_mrs, plot_coord, read_file
+
+def run_blocking(func, *args, **kwargs):
+    event = threading.Event()
+    result_container = {}
+    def wrapper():
+        result_container['result'] = func(*args, **kwargs)
+        event.set()
+    wx.CallAfter(wrapper)
+    event.wait()
+    return result_container['result']
 
 def loadInput(self):
     self.save_lastfiles()
@@ -69,15 +79,18 @@ def loadInput(self):
     if nucleus == "31P" and self.issvs:
         has_phase_alignment = any("PhaseAlignment31P" in step.__class__.__name__ for step in self.steps) or any("TEBasedPhaseCorrecton31P" in step.__class__.__name__ for step in self.steps)
         if not has_phase_alignment:
-            dlg = wx.MessageDialog(
-                self,
-                "31P data detected, but the current pipeline does not include the 'PhaseAlignment31P' step.\n"
-                "Would you like to load the standard 31P pipeline?",
-                "Pipeline Mismatch",
-                wx.YES_NO | wx.ICON_QUESTION
-            )
-            response = dlg.ShowModal()
-            dlg.Destroy()
+            def dialog_func():
+                dlg = wx.MessageDialog(
+                    self,
+                    "31P data detected, but the current pipeline does not include the 'PhaseAlignment31P' step.\n"
+                    "Would you like to load the standard 31P pipeline?",
+                    "Pipeline Mismatch",
+                    wx.YES_NO | wx.ICON_QUESTION
+                )
+                response = dlg.ShowModal()
+                dlg.Destroy()
+                return response
+            response = run_blocking(dialog_func)
             if response == wx.ID_YES:
                 standard_pipeline_path = os.path.join(os.getcwd(), "31P_standard_pipeline.pipe")
                 self.pipeline_frame.on_load_pipeline(event=None, filepath=standard_pipeline_path)
@@ -159,28 +172,33 @@ def loadInput(self):
         table.MRSinMRS_Table[csvcols].to_csv(os.path.join(self.outputpath, "MRSinMRS_table.csv"))
     return True
 
-dataDict = {}
+# dataDict = {}
+labels = []
 
 def processStep(self, step, nstep):
-    global dataDict
-    dataDict["input"] = self.dataSteps[-1]
-    dataDict["wref"] = self.wrefSteps[-1]
-    dataDict["output"] = []
-    dataDict["wref_output"] = []
-    dataDict["header"] = self.headerSteps[-1] # added for transmit header
+    with self.data_lock:
+        dataDict = {}
+        dataDict["input"] = self.dataSteps[-1]
+        dataDict["wref"] = self.wrefSteps[-1]
+        dataDict["output"] = []
+        dataDict["wref_output"] = []
+        dataDict["header"] = self.headerSteps[-1] # added for transmit header
 
-    self.button_step_processing.Disable()
+    wx.CallAfter(self.button_step_processing.Disable)
     if not self.fast_processing:
-        self.button_auto_processing.Disable()
+        wx.CallAfter(self.button_auto_processing.Disable)
 
     utils.log_debug("Running ", step.__class__.__name__)
     start_time = time.time()
     step.process(dataDict)
     utils.log_info("Time to process " + step.__class__.__name__ + ": {:.3f}".format(time.time() - start_time))
-    self.dataSteps.append(dataDict["output"])
-    if len(dataDict["wref_output"]) != 0:
-        self.wrefSteps.append(dataDict["wref_output"])
-    else: self.wrefSteps.append(dataDict["wref"])
+    with self.data_lock:
+        self.dataSteps.append(dataDict["output"])
+        if len(dataDict["wref_output"]) != 0:
+            self.wrefSteps.append(dataDict["wref_output"])
+        else: self.wrefSteps.append(dataDict["wref"])
+        if "labels" in dataDict.keys() and dataDict["labels"] is not None:
+            global labels; labels = dataDict["labels"]
 
     utils.log_debug("Plotting ", step.__class__.__name__)
     start_time = time.time()
@@ -219,9 +237,9 @@ def processStep(self, step, nstep):
 
     # canvas plot
     if not self.fast_processing:
-        self.matplotlib_canvas.clear()
-        step.plot(self.matplotlib_canvas.figure, dataDict)
-        self.matplotlib_canvas.draw()
+        wx.CallAfter(self.matplotlib_canvas.clear)
+        wx.CallAfter(step.plot, self.matplotlib_canvas.figure, dataDict)
+        wx.CallAfter(self.matplotlib_canvas.draw)
     utils.log_info("Time to plot " + step.__class__.__name__ + ": {:.3f}".format(time.time() - start_time))
     
 def saveDataPlot(self):
@@ -237,13 +255,15 @@ def saveDataPlot(self):
 
     # 2. Show the same two-button dialog in all modes
     if self.issvs:
-        dlg = wx.MessageDialog(None, "Do you want to manually adjust frequency and phase shifts of the result?",
-                            "", wx.YES_NO | wx.ICON_INFORMATION)
-        button_clicked = dlg.ShowModal()
-        dlg.Destroy()
-
+        def man_adj_dialog():
+            dlg = wx.MessageDialog(None, "Do you want to manually adjust frequency and phase shifts of the result?",
+                                "", wx.YES_NO | wx.ICON_INFORMATION)
+            button_clicked = dlg.ShowModal()
+            dlg.Destroy()
+            return button_clicked
+        button_clicked = run_blocking(man_adj_dialog)
         if button_clicked == wx.ID_YES:
-            self.matplotlib_canvas.clear()
+            wx.CallAfter(self.matplotlib_canvas.clear)
             from processing.manual_adjustment import ManualAdjustment
             manual_adjustment = ManualAdjustment(self.dataSteps[-1], self.matplotlib_canvas, self.manual_adjustment_params)
             data, *self.manual_adjustment_params = manual_adjustment.run()
@@ -301,10 +321,8 @@ def analyseResults(self):
     if self.sequence is not None:
         strte = str(results[0].te)
         if strte.endswith(".0"): strte = strte[:-2]
-        if nucleus == "31P":
-            basis_file_gen = f"{int(tesla)}T_{self.sequence}_31P_TE{strte}ms.BASIS" #basis_file_gen = f"{int(tesla)}T_{self.sequence}_31P_TE{strte}ms.BASIS"
-        else:
-            basis_file_gen = f"{int(tesla)}T_{self.sequence}_TE{strte}ms.BASIS"
+        if nucleus == "31P": basis_file_gen = f"{int(tesla)}T_{self.sequence}_31P_TE{strte}ms.BASIS"
+        else: basis_file_gen = f"{int(tesla)}T_{self.sequence}_TE{strte}ms.BASIS"
         basis_file_gen = os.path.join(self.programpath, "lcmodel", "basis", basis_file_gen)
     else: utils.log_warning("Sequence not found, basis file not generated")
 
@@ -313,27 +331,28 @@ def analyseResults(self):
         if not os.path.exists(self.basis_file_user):
             utils.log_warning("Basis set not found:\n\t", self.basis_file_user)
             self.basis_file = None
-        else:
-            self.basis_file = self.basis_file_user
+        else: self.basis_file = self.basis_file_user
 
     # If no user basis file, check generated basis file
     if self.basis_file is None and basis_file_gen is not None and os.path.exists(basis_file_gen):
-        dlg = wx.MessageDialog(
-            None, 
-            basis_file_gen, 
-            "Basis set found, is it the right one?\n" + basis_file_gen, 
-            wx.YES_NO | wx.CANCEL | wx.ICON_INFORMATION
-        )
-        button_clicked = dlg.ShowModal()
-        dlg.Destroy()  # Always destroy dialogs after use
+        def basis_dialog():
+            dlg = wx.MessageDialog(
+                None, basis_file_gen, 
+                "Basis set found, is it the right one?\n" + basis_file_gen, 
+                wx.YES_NO | wx.CANCEL | wx.ICON_INFORMATION
+            )
+            button_clicked = dlg.ShowModal()
+            dlg.Destroy()
+            return button_clicked
+        button_clicked = run_blocking(basis_dialog)
         if button_clicked == wx.ID_YES: self.basis_file = basis_file_gen
         elif button_clicked == wx.ID_CANCEL: return False
-
-    # If still no basis file
+    
     if self.basis_file is None:
         utils.log_warning("Basis set not found:\n\t", basis_file_gen)
-        self.fitting_frame.Show()
-        self.fitting_frame.SetFocus()
+        # wx.CallAfter(self.fitting_frame.Show)
+        run_blocking(self.fitting_frame.Show)
+        wx.CallAfter(self.fitting_frame.SetFocus)
         while self.fitting_frame.IsShown():
             time.sleep(0.1)
         self.basis_file = self.basis_file_user
@@ -358,21 +377,15 @@ def analyseResults(self):
             utils.log_warning(f"Error reading default control file: {e}.")
             params = None
     if params is None:
-        utils.log_error("Control file not found or could not be read:\n\t", self.control_file_user)
+        utils.log_error("Control file not found or could not be read: ", self.control_file_user)
         return False
 
     # Handle labels
-    if "labels" in dataDict.keys():
-        labels = dataDict["labels"]
-    else:
-        if self.issvs == True:
-            labels = [str(i) for i in range(len(results))]
-        else:
-            labels = [str(i) for i in range(len(results[0]))]
-
+    global labels
+    if labels is None or len(labels) == 0:
+        if self.issvs == True: labels = [str(i) for i in range(len(results))]
+        else: labels = [str(i) for i in range(len(results[0]))]
     result_np = np.array(results[0])
-    utils.log_info(f"length of results {len(results[0])}")
-    utils.log_info(f"shape of results {result_np.shape}")
 
     # Segmentation and water concentration (only for 1H)
     wconc = None
@@ -442,22 +455,22 @@ def analyseResults(self):
     workpath = os.path.join(os.path.dirname(self.outputpath_base), "temp")
     if os.path.exists(workpath): shutil.rmtree(workpath)
     os.mkdir(workpath)
-    utils.log_debug("LCModel work folder: ", workpath)
+    utils.log_debug(f"LCModel work folder: {workpath}")
 
     # Copy LCModel executable to workpath
     if utils.iswindows(): command = f"""copy "{lcmodelfile}" "{workpath}" """
     else: command = f"""cp "{lcmodelfile}" "{workpath}" """
     result_copy = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
-    utils.log_debug(f"Copy command output:\n{result_copy.stdout}")
+    utils.log_debug(f"Copy command output: {result_copy.stdout}")
     if result_copy.stderr:
-        utils.log_warning(f"Copy command errors:\n{result_copy.stderr}")
+        utils.log_warning(f"Copy command errors: {result_copy.stderr}")
 
     # Setup LCModel save path
     lcmodelsavepath = os.path.join(self.outputpath, "lcmodel")
     if os.path.exists(lcmodelsavepath):
         shutil.rmtree(lcmodelsavepath)
     os.mkdir(lcmodelsavepath)
-    utils.log_debug("LCModel output folder: ", lcmodelsavepath)
+    utils.log_debug(f"LCModel output folder: {lcmodelsavepath}")
     
     if self.issvs == True: temp_results = results
     else: temp_results = results[0]
@@ -467,54 +480,49 @@ def analyseResults(self):
         """Process a single voxel for LCModel fitting."""
         label = "lcm" if label == "0" else label
         result_label_np = np.array(result)
-        utils.log_debug(f"shape of result {label}: {result_label_np.shape}")
-        rparams = {}
-        for key in ["Nucleus", "nucleus"]:
-            # if key in self.header.keys():
-                rparams = {
-                    "KEY": 123456789,
-                    "FILRAW": f"./{label}.RAW",
-                    "FILBAS": self.basis_file,
-                    "FILPRI": f"./{label}.print",
-                    "FILTAB": f"./{label}.table",
-                    "FILPS": f"./{label}.ps",
-                    "FILCOO": f"./{label}.coord",
-                    "FILCOR": f"./{label}.coraw",
-                    "FILCSV": f"./{label}.csv",
-                    "NUNFIL": result.np,
-                    "DELTAT": result.dt,
-                    "ECHOT": result.te,
-                    "HZPPPM": result.f0,
-                    "LCOORD": 9,
-                    "LCSV": 11,
-                    "LTABLE": 7
-                }
+        rparams = {
+            "KEY": 123456789,
+            "FILRAW": f"./{label}.RAW",
+            "FILBAS": self.basis_file,
+            "FILPRI": f"./{label}.print",
+            "FILTAB": f"./{label}.table",
+            "FILPS": f"./{label}.ps",
+            "FILCOO": f"./{label}.coord",
+            "FILCOR": f"./{label}.coraw",
+            "FILCSV": f"./{label}.csv",
+            "NUNFIL": result.np,
+            "DELTAT": result.dt,
+            "ECHOT": result.te,
+            "HZPPPM": result.f0,
+            "LCOORD": 9,
+            "LCSV": 11,
+            "LTABLE": 7
+        }
 
-                if wresult is not None:
-                    rparams.update({
-                        "FILH2O": f"./{label}.H2O",
-                        "DOWS": "EddyCurrentCorrection" not in self.pipeline  # Use water ref correction if appropriate.
-                    })
-                    if wconc is not None:
-                        rparams.update({"WCONC": wconc})
-                else:  # 31P or other
-                    rparams.update({"DOWS": False})
-                    rparams.pop("FILH2O", None)
-                    rparams.pop("WCONC", None)
+        if wresult is not None:
+            rparams.update({
+                "FILH2O": f"./{label}.H2O",
+                "DOWS": "EddyCurrentCorrection" not in self.pipeline
+            })
+            if wconc is not None:
+                rparams.update({"WCONC": wconc})
+        else:
+            rparams.update({"DOWS": False})
+            rparams.pop("FILH2O", None)
+            rparams.pop("WCONC", None)
 
-                # Merge any extra parameters
-                if params:
-                    params_upper = {k.upper(): v for k, v in params.items()}
-                    excluded_keys = [
-                        "FILRAW", "FILBAS", "FILPRI", "FILTAB",
-                        "FILPS", "FILCOO", "FILCOR", "FILCSV", "FILH2O",
-                        "NUNFIL", "DELTAT", "ECHOT", "HZPPPM"
-                    ]
-                    params_filtered = {
-                        k: v for k, v in params_upper.items()
-                        if k not in excluded_keys
-                    }
-                    rparams.update(params_filtered)
+        if params:
+            params_upper = {k.upper(): v for k, v in params.items()}
+            excluded_keys = [
+                "FILRAW", "FILBAS", "FILPRI", "FILTAB",
+                "FILPS", "FILCOO", "FILCOR", "FILCSV", "FILH2O",
+                "NUNFIL", "DELTAT", "ECHOT", "HZPPPM"
+            ]
+            params_filtered = {
+                k: v for k, v in params_upper.items()
+                if k not in excluded_keys
+            }
+            rparams.update(params_filtered)
 
         # Write CONTROL and RAW files
         try:
@@ -532,12 +540,12 @@ def analyseResults(self):
         if utils.iswindows(): command = f"""cd "{workpath}" & lcmodel.exe < {label}.CONTROL"""
         else: command = f"""cd "{workpath}" && ./lcmodel < {label}.CONTROL"""
         utils.log_info(f"Running LCModel for {label}...")
-        utils.log_debug("\n\t" + command)
+        utils.log_debug(f"LCModel command: {command}")
 
         try:
             result_lcmodel = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
-            utils.log_debug(f"LCModel Output for {label}:\n{result_lcmodel.stdout}")
-            utils.log_info(f"LCModel Errors for {label}:\n{result_lcmodel.stderr}")
+            utils.log_debug(f"LCModel Output for {label}: {result_lcmodel.stdout}")
+            utils.log_info(f"LCModel Errors for {label}: {result_lcmodel.stderr}")
             expected_files = [f"{label}.table", f"{label}.ps", f"{label}.coord", f"{label}.csv"]
             missing_files = [f for f in expected_files if not os.path.exists(os.path.join(workpath, f))]
             if missing_files: utils.log_error(f"Missing LCModel output files for {label}: {missing_files}")

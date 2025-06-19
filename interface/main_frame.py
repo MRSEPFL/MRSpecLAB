@@ -47,9 +47,11 @@ class MainFrame(LayoutFrame):
         self.skip_manual_adjustment = False
         self.manual_adjustment_params = None
 
-        self.batch_mode = False      # Will be True when "Run in Batch Mode" is toggled.
-        self.batch_folder = None     # Will store the path to the batch system folder.
-        self.batch_participants = [] # A list of participant folder paths.
+        self.batch_mode = False
+        self.batch_folder = None
+        self.batch_participants = []
+
+        self.data_lock = threading.Lock()
         
         #self.background_image = self.load_background_image() #check what it does
 
@@ -618,7 +620,3 @@ class MainApp(wx.App):
         self.SetTopWindow(self.frame)
         self.frame.Show()
         return True
-
-if __name__ == "__main__":
-    app = MainApp(0)
-    app.MainLoop()
