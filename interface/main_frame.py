@@ -1,20 +1,3 @@
-"""import wx
-import os
-import glob
-import inspect
-import importlib.util
-import threading
-import pickle
-import shutil
-
-from interface import utils
-from interface.pipeline_frame import PipelineFrame
-from interface.fitting_frame import FittingFrame
-from interface.main_layout import LayoutFrame
-from interface.plot_helpers import plot_coord, get_coord_info
-from processing.processing_pipeline import processPipeline, autorun_pipeline_exe
-from inout.read_coord import ReadlcmCoord"""
-
 import wx
 import os
 import glob
@@ -23,27 +6,26 @@ import importlib.util
 import threading
 import pickle
 import shutil
-
-
 import numpy as np
-# import matplotlib.pyplot as plt
-# import pandas as pd
 import nibabel as nib
 from scipy.ndimage import rotate, zoom
-#import cv2
-#from skimage import measure
-
-from interface.metabolite_map_frame import MetaboliteMapParameterDialog
-from processing.get_mapping import create_brain_mask
 
 from interface import utils
 from interface.pipeline_frame import PipelineFrame
 from interface.fitting_frame import FittingFrame
 from interface.main_layout import LayoutFrame
-from interface.plot_helpers import plot_coord, get_coord_info#, plot_ext
+from interface.plot_helpers import plot_coord, get_coord_info #, plot_ext
 from processing.processing_pipeline import processPipeline, autorun_pipeline_exe
 from inout.read_coord import ReadlcmCoord
+from interface.metabolite_map_frame import MetaboliteMapParameterDialog
+from processing.get_mapping import create_brain_mask
 # from inout.group_files_by_header import group_files_by_header, group_water_files_by_header
+
+if os.name == 'posix': # avoid X11 errors on Linux
+    try:
+        import ctypes
+        ctypes.cdll.LoadLibrary('libX11.so').XInitThreads()
+    except: print("Could not initialize X11 threads; instability may occur.")
 
 class MainFrame(LayoutFrame):
 
