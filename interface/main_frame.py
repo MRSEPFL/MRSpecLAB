@@ -285,12 +285,14 @@ class MainFrame(LayoutFrame):
             return utils.log_error(f"Output folder does not yet exist: {self.outputpath}")
         if utils.iswindows(): os.startfile(self.outputpath)
         elif utils.islinux():
-            try:
-                import subprocess
-                wsl_distro = os.environ.get("WSL_DISTRO_NAME", False)
-                if not wsl_distro: subprocess.run(['xdg-open', self.outputpath], check=True) # native Linux
-                else: subprocess.run(['explorer.exe', "\\\\wsl$\\" + wsl_distro + self.outputpath.replace("/", "\\")], check=True) # WSL
-            except Exception as e: utils.log_error(f"Could not open output folder: {e}")
+            import subprocess
+            wsl_distro = os.environ.get("WSL_DISTRO_NAME", False)
+            if wsl_distro: # WSL
+                try: subprocess.run(['explorer.exe', "\\\\wsl$\\" + wsl_distro + self.outputpath.replace("/", "\\")], check=True)
+                except: pass # WSL likes to throw errors even when it works
+            else: # native Linux
+                try: subprocess.run(['xdg-open', self.outputpath], check=True)
+                except Exception as e: utils.log_error(f"Could not open output folder: {e}")
         event.Skip()
 
     def on_open_pipeline(self, event):

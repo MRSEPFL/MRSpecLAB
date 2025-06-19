@@ -18,7 +18,7 @@ git clone https://github.com/MRSEPFL/MRspecLAB.git
 ```
 - Install wxPython from the wxPython repository URL, as the version on pip requires building from source, which is long and can be hard to set up. **Do not change `22.04` to `24.04`**; gsnodegraph enforces wxPython version 4.2.1 specifically, which was not specially built for 24.04. You can use `20.04` if you have an older Ubuntu version:
 ```sh
-../venv_mrs/bin/python3.10 -m pip install -U -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 wxPython==4.2.1
+./venv_mrs/bin/python3.10 -m pip install -U -f https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-22.04 wxPython==4.2.1
 ```
 - The wxPython version defaults to the `libtiff.so.5` binary when built in a portable environment, but Ubuntu 24.04 uses `libtiff.so.6`. Ensure the availability of version 5 using the following commands ([source](https://askubuntu.com/questions/1540324/libtiff5-removed-after-ubuntu-24-04-installation-how-to-install-again)); this creates `.deb` files in the working directory, which can be deleted once both commands succeed:
 ```sh
