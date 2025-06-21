@@ -226,14 +226,15 @@ def processStep(self, step, nstep):
         if not os.path.exists(steppath): os.mkdir(steppath)
         filepath = os.path.join(steppath, "data")
         if not os.path.exists(filepath): os.mkdir(filepath)
-        for i, d in enumerate(dataDict["output"]): 
-            if d is None: continue
-            save_raw(os.path.join(filepath, str(i) + ".RAW"), d, seq=self.sequence)
-            save_nifti(os.path.join(filepath, str(i) + ".nii"), d, seq=self.sequence)
+        for i, d in enumerate(dataDict["output"]):
+            if d is not None: save_raw(os.path.join(filepath, "metab_" + str(i+1) + ".RAW"), d, seq=self.sequence)
+            else: utils.log_warning(f"Data for index {i} is None, skipping save.")
         for i, d in enumerate(dataDict["wref_output"]):
-            if d is None: continue
-            save_raw(os.path.join(filepath, "wref_" + str(i) + ".RAW"), d, seq=self.sequence)
-            save_nifti(os.path.join(filepath, "wref_" + str(i) + ".nii"), d, seq=self.sequence)
+            if d is not None: save_raw(os.path.join(filepath, "water_" + str(i+1) + ".RAW"), d, seq=self.sequence)
+            else: utils.log_warning(f"Water reference data for index {i} is None, skipping save.")
+        save_nifti(os.path.join(filepath, "metab.nii"), dataDict['output'], seq=self.sequence)
+        if dataDict["wref_output"] is not None and len(dataDict["wref_output"]) > 0:
+            save_nifti(os.path.join(filepath, "water.nii"), dataDict["wref_output"], seq=self.sequence)
 
     # canvas plot
     if not self.fast_processing:
@@ -606,7 +607,7 @@ def analyseResults(self):
 
     # Clean up workpath
     try:
-        shutil.rmtree(workpath)
+        # shutil.rmtree(workpath)
         utils.log_debug("Workpath deleted successfully.")
     except Exception as e:
         utils.log_warning(f"Failed to delete workpath: {e}")

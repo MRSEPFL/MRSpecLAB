@@ -92,18 +92,25 @@ def save_control(filepath, params):
         fout.write(" $END\n")
 
 def save_nifti(filepath, data, seq="PRESS"):
-    while len(data.shape) > 1: data = data[0] # yeah
-    img = nib.nifti1.Nifti1Image(np.array([[[data]]]), affine=np.eye(4), dtype=np.complex128)
+    if isinstance(data, list):
+        if len(data) == 0: return utils.log_error(f"Data list is empty, cannot save {filepath}.")
+        if not isinstance(data[0], np.ndarray):
+            return utils.log_error(f"Data is a list but not a numpy array, cannot save {filepath}.")
+        if len(data) == 1: data = data[0]
+    elif isinstance(data, np.ndarray):
+        data = [data]
+    else: return utils.log_error(f"Data is not a list or numpy array, cannot save {filepath}.")
+    img = nib.nifti1.Nifti1Image(np.array(data).T.reshape((1, 1, 1, len(data[0]), len(data))), affine=np.eye(4), dtype=np.complex128)
     header = img.header
-    header['descrip'] = (seq + "_" + str(data.te) + "ms_" + str(data.f0) + "Hz_" + str(len(data)) + "pts").encode('utf-8')
+    header['descrip'] = (seq + "_" + str(data[0].te) + "ms_" + str(data[0].f0) + "Hz_" + str(len(data[0])) + "pts").encode('utf-8')
     if header['descrip'].nbytes > 80: 
         utils.log_warning("Description exceeds 80 bytes, truncating to fit NIfTI header limit.")
         header['descrip'] = header['descrip'][:80]
     metadata = {
-        "SpectrometerFrequency": [data.f0],
-        "EchoTime": data.te,
-        "RepetitionTime": getattr(data, 'tr', None),
-        "ResonantNucleus": [getattr(data, 'nucleus', "unknown")],
+        "SpectrometerFrequency": [data[0].f0],
+        "EchoTime": data[0].te,
+        "RepetitionTime": getattr(data[0], 'tr', None),
+        "ResonantNucleus": [getattr(data[0], 'nucleus', "unknown")],
         "Sequence": seq,
     }
     json_metadata = json.dumps(metadata).encode('utf-8')
