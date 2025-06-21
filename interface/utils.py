@@ -73,6 +73,7 @@ def log_info(*args):
 
 def log_error(*args):
     log_text(ERROR_COLOR, *args)
+    print("ERROR:", *args)
 
 def log_warning(*args):
     log_text(WARNING_COLOR, *args)
