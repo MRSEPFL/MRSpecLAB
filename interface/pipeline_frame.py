@@ -151,6 +151,7 @@ class PipelineFrame(wx.Frame):
             self.nodegraph.ConnectNodes(src, dst)
         if len(toload) > 2:
             self.Parent.manual_adjustment_params = toload[2]
+            utils.log_info(f"Loaded manual adjustment parameters: {self.Parent.manual_adjustment_params}")
         self.nodegraph.Refresh()
         self.Parent.retrieve_pipeline()
         self.Parent.update_statusbar()

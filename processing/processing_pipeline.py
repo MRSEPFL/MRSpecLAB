@@ -494,18 +494,6 @@ def analyseResults(self):
             "LTABLE": 7
         }
 
-        if wresult is not None:
-            rparams.update({
-                "FILH2O": f"./{label}.H2O",
-                "DOWS": "EddyCurrentCorrection" not in self.pipeline
-            })
-            if wconc is not None:
-                rparams.update({"WCONC": wconc})
-        else:
-            rparams.update({"DOWS": False})
-            rparams.pop("FILH2O", None)
-            rparams.pop("WCONC", None)
-
         if params:
             params_upper = {k.upper(): v for k, v in params.items()}
             excluded_keys = [
@@ -518,6 +506,18 @@ def analyseResults(self):
                 if k not in excluded_keys
             }
             rparams.update(params_filtered)
+        if self.originalWref is not None and nucleus == "1H" and wresult is not None:
+            rparams.update({
+                "FILH2O": f"./{label}.H2O",
+                "DOWS": "EddyCurrentCorrection" not in self.pipeline
+            })
+            if wconc is not None:
+                rparams.update({"WCONC": wconc})
+        else:
+            rparams.update({"DOWS": False})
+            rparams.update({"DOECC": False})
+            rparams.pop("FILH2O", None)
+            rparams.pop("WCONC", None)
 
         # Write CONTROL and RAW files
         try:
@@ -539,8 +539,7 @@ def analyseResults(self):
 
         try:
             result_lcmodel = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
-            utils.log_debug(f"LCModel Output for {label}: {result_lcmodel.stdout}")
-            utils.log_info(f"LCModel Errors for {label}: {result_lcmodel.stderr}")
+            utils.log_info(f"LCModel Output for {label}: {os.linesep.join([l for l in result_lcmodel.stdout.splitlines() if l])}")
             expected_files = [f"{label}.table", f"{label}.ps", f"{label}.coord", f"{label}.csv"]
             missing_files = [f for f in expected_files if not os.path.exists(os.path.join(workpath, f))]
             if missing_files: utils.log_error(f"Missing LCModel output files for {label}: {missing_files}")
@@ -631,9 +630,16 @@ def processPipeline(self):
                 wx.CallAfter(self.button_auto_processing.Enable)
 
         elif self.current_step == len(self.steps):
-            self.pipeline_frame.on_save_pipeline(None, os.path.join(self.outputpath, "pipeline.pipe"), self.manual_adjustment_params)
             saveDataPlot(self)
-            if analyseResults(self): wx.CallAfter(self.plot_box.AppendItems, "lcmodel")
+            if analyseResults(self):
+                wx.CallAfter(self.plot_box.AppendItems, "lcmodel")
+                self.pipeline_frame.on_save_pipeline(None, os.path.join(self.outputpath, "pipeline.pipe"), self.manual_adjustment_params)
+                if self.manual_adjustment_params is not None:
+                    with open(os.path.join(self.outputpath, "manual_adjustment.txt"), "w") as f:
+                        f.write("Manual adjustment parameters; these values can also be loaded with the .pipe file:\n")
+                        f.write("Frequency shift: " + str(self.manual_adjustment_params[0]) + " PPM\n" \
+                                "0th order phase shift: " + str(self.manual_adjustment_params[1]) + "°\n" \
+                                "1st order phase shift: " + str(self.manual_adjustment_params[2]) + "°/PPM\n")
             else: self.reset()
 
         self.current_step += 1
