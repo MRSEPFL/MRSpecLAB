@@ -5,7 +5,7 @@
 --> download the .zip from [zenodo](https://zenodo.org/records/14866163) for Windows.
 --> source code available for other OS in this repository.
 
-The MRspecLAB platform is closely described in this publication: [PUBLICATION](insert link). For help please contact us under: antonia.kaiser@epfl.ch, ying.xiao@epfl.ch or lijing.xin@epfl.ch.
+The MRspecLAB platform is closely described in this publication: [PUBLICATION](insert link). For help please contact us under: mrspeclab@gmail.com.
 If you would like to be kept updated about the newest additions and updates, please subscribe to the [mailinglist](https://forms.gle/AQjCQu7JHhiadrfx8).
 
 A detailed user manual can be found in [MANUAL.md](/MANUAL.md).
