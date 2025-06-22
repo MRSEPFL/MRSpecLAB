@@ -1,14 +1,8 @@
-import numpy as np
-import nibabel as nib
 import json
 import numpy as np
-import os
-import sys
-import shutil
-import glob
+import nibabel as nib
+from suspect import MRSData
 from interface import utils
-import subprocess
-# from spec2nii.other_formats import lcm_raw
 
 # adapted from suspect.io.lcmodel.save_raw because it gets SEQ errors
 def save_raw(filepath, data, seq="PRESS"):
@@ -97,9 +91,7 @@ def save_nifti(filepath, data, seq="unknown_seq"):
         if len(data) == 0: return utils.log_error(f"Data list is empty, cannot save {filepath}.")
         if not isinstance(data[0], np.ndarray):
             return utils.log_error(f"Data is a list but not a numpy array, cannot save {filepath}.")
-        if len(data) == 1: data = data[0]
-    elif isinstance(data, np.ndarray):
-        data = [data]
+    elif isinstance(data, MRSData): data = [data]
     else: return utils.log_error(f"Data is not a list or numpy array, cannot save {filepath}.")
     affine = data[0].transform if hasattr(data[0], 'transform') and data[0].transform is not None else np.eye(4)
     img = nib.nifti1.Nifti1Image(np.array(data).swapaxes(0, 1).reshape((1, 1, 1, len(data[0]), len(data))), affine=affine, dtype=np.complex128)
