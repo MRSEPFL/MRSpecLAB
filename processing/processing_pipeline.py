@@ -67,13 +67,9 @@ def loadInput(self):
         utils.log_error("No header found")
         return False
     
-    nucleus = None
-    for key in ["Nucleus", "nucleus"]:
-        if key in self.header:
-            nucleus = self.header[key]
-            break
-    if nucleus is None:
-        utils.log_error("Nucleus not found in header")
+    nucleus = self.originalData[0].nucleus
+    if nucleus in (None, 'unknown'):
+        utils.log_error("Nucleus not found in data.")
         return False
 
     if nucleus == "31P" and self.issvs:
@@ -288,16 +284,14 @@ def analyseResults(self):
     self.basis_file = None
 
     # Determine nucleus and Larmor frequency
-    nucleus = None
-    larmor = 0
-    for key in ["Nucleus", "nucleus"]:
-        if key in self.header.keys():
-            nucleus = self.header[key]
-            larmor = utils.larmor_frequencies[nucleus]
-            break
-    if nucleus is None:
-        utils.log_error("Nucleus information not found in header.")
+    nucleus = self.originalData[0].nucleus
+    if nucleus is None or nucleus == 'unknown':
+        utils.log_error("Nucleus not found in data.")
         return False
+    if nucleus not in utils.larmor_frequencies:
+        utils.log_error(f"Nucleus '{nucleus}' not supported. Supported nuclei: {list(utils.larmor_frequencies.keys())}")
+        return False
+    larmor = utils.larmor_frequencies[nucleus]
 
     # Conditionally set wresult based on the nucleus
     if nucleus == "1H":

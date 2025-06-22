@@ -1,10 +1,10 @@
 import os
 import numpy
 import mapvbvd
-import suspect.io
-import pydicom.dicomio
+import pydicom
 import nibabel, json
 from suspect import MRSData
+import suspect.io
 from suspect.io._common import complex_array_from_iter
 from suspect.io.twix import calculate_orientation
 from suspect._transforms import rotation_matrix
@@ -40,6 +40,11 @@ def load_file(filepath):
     if ext in ["ima", "dat"]: vendor = "siemens"
     elif ext == "sdat": vendor = "philips"
     if not isinstance(data, list): data = [data]
+    nucleus = "unknown"
+    for key in ["Nucleus", "nucleus"]:
+        if key in header.keys():
+            nucleus = header[key]
+    for d in data: d.nucleus = nucleus
     return data, header, ext, vendor
 
 def loadVBVD(filepath):
@@ -144,7 +149,7 @@ def transformation_matrix(x_vector, y_vector, translation, spacing):
 
 # adapted from suspect.io.load_dicom
 def load_dicom(filename):
-    dataset = pydicom.dicomio.read_file(filename)
+    dataset = pydicom.dcmread(filename, stop_before_pixels=True)
     sw = dataset[0x0018, 0x9052].value
     dt = 1.0 / sw
     f0 = dataset[0x0018, 0x9098].value
@@ -224,26 +229,29 @@ def load_rda(filepath):
     utils.log_info(f"Shape of the data: {data.shape}")
     return MRSData(data, dt, f0=f0, te=te, tr=tr, ppm0=ppm0), header
 
+# find nifti spec at https://github.com/NIFTI-Imaging/nifti_clib/blob/master/niftilib/nifti1.h
 def load_nifti(filepath):
     img: nibabel.nifti2.Nifti2Image = nibabel.load(filepath)
-    hdr_ext_codes = img.header.extensions.get_codes()
-    mrs_hdr_ext = json.loads(img.header.extensions[hdr_ext_codes.index(44)].get_content())
 
-    if img.header.get_value_label("datatype") == "complex128":
-        data = img.get_fdata(dtype=numpy.complex128)
-    elif img.header.get_value_label("datatype") == "complex64":
-        data = img.get_fdata(dtype=numpy.complex64)
+    datatype = img.header.get_value_label("datatype")
+    if datatype == "complex128": data = img.get_fdata(dtype=numpy.complex128)
+    elif datatype == "complex64": data = img.get_fdata(dtype=numpy.complex64)
     else:
-        utils.log_error(f"Unknown datatype in NIfTI file {filepath}.")
+        utils.log_error(f"Unknown datatype '{datatype}' in NIfTI file {filepath}.")
         return None, None
+    
     if not all([d == 1 for d in data.shape[:3]]):
         utils.log_error("Multi-voxel data not supported.")
         return None, None
     data = data[0, 0, 0] # single voxel data
-    coilcombined = True
-    ave_per_rep = 1
-    if len(data.shape) == 1:
-        data = numpy.expand_dims(data, axis=0)     
+    
+    hdr_ext_codes = img.header.extensions.get_codes()
+    if 44 not in hdr_ext_codes:
+        utils.log_error(f"MRS Header extension (code 44) not found in NIfTI file {filepath}.")
+        return None, None
+    mrs_hdr_ext = json.loads(img.header.extensions[hdr_ext_codes.index(44)].get_content())
+    coilcombined = True; ave_per_rep = 1
+    if len(data.shape) == 1: data = numpy.expand_dims(data, axis=0)
     else:
         order = [0, 0, 0, 0]
         mapping = {"DIM_MEAS": 0, "DIM_DYN": 1, "DIM_EDIT": 2, "DIM_COIL": 3}
@@ -262,31 +270,31 @@ def load_nifti(filepath):
     if coilcombined: data = numpy.reshape(data, (numpy.prod(data.shape[:-1]), data.shape[-1]))
     else: data = numpy.reshape(data, (numpy.prod(data.shape[:-2]), data.shape[-2], data.shape[-1]))
     
-    dt = img.header["pixdim"][4]
-    if img.header["xyzt_units"] & 16: # dt in ms or us
+    if img.header["xyzt_units"] & 16:
         if img.header["xyzt_units"] & 8:
-            dt = dt * 1e-6 # us to s
-        else: dt = dt * 1e-3 # ms to s
+            data_to_ms = 1e-3 # us to ms
+        else: data_to_ms = 1.0 # ms to ms
+    else: data_to_ms = 1e3 # s to ms
 
-    try: f0 = mrs_hdr_ext["SpectrometerFrequency"][0] # MHz
-    except: utils.log_error("SpectrometerFrequency not found in header extension.")
-    try: te = mrs_hdr_ext["EchoTime"] * 1e3 # s to ms
-    except: utils.log_error("Echo time not found in header extension")
-    try: tr = mrs_hdr_ext["RepetitionTime"] * 1e3 # s to ms
-    except: utils.log_error("Repetition time time not found in header extension")
+    dt = img.header["pixdim"][4] * data_to_ms * 1e-3 # s /!\
+    if "SpectrometerFrequency" in mrs_hdr_ext: f0 = mrs_hdr_ext.get("SpectrometerFrequency", [0])[0] # MHz
+    if f0 == 0: utils.log_error(f"SpectrometerFrequency not found in header extension of NIfTI file {filepath}.")
+    if "EchoTime" in mrs_hdr_ext: te = mrs_hdr_ext.get("EchoTime", 0) * data_to_ms # ms
+    if te == 0: utils.log_error(f"Echo time not found in header extension of NIfTI file {filepath}.")
+    if "RepetitionTime" in mrs_hdr_ext: tr = mrs_hdr_ext.get("RepetitionTime", 0) * data_to_ms # ms
+    if tr == 0: utils.log_error(f"Repetition time not found in header extension of NIfTI file {filepath}.")
 
     header = {}
     header["Nucleus"] = mrs_hdr_ext["ResonantNucleus"][0]
     header["Sequence"] = None
-    if "SequenceName" in mrs_hdr_ext:
-        header["Sequence"] = mrs_hdr_ext["SequenceName"]
+    if "SequenceName" in mrs_hdr_ext: header["Sequence"] = mrs_hdr_ext["SequenceName"]
     elif "siemens_sequence_info" in mrs_hdr_ext and "sequence" in mrs_hdr_ext["siemens_sequence_info"]:
         header["Sequence"] = mrs_hdr_ext["siemens_sequence_info"]["sequence"]
+    elif "Sequence" in mrs_hdr_ext: header["Sequence"] = mrs_hdr_ext["Sequence"]
+    else: utils.log_warning(f"Sequence name not found in NIfTI file {filepath}.")
     
     transform = numpy.array(img.header.get_best_affine())
-    metadata = {
-        "ave_per_rep": ave_per_rep
-    }
+    metadata = { "ave_per_rep": ave_per_rep}
     return [MRSData(data[i], dt, f0, te=te, tr=tr, transform=transform, metadata=metadata) for i in range(data.shape[0])], header
 
 def load_ima_from_suspect(filepath):

@@ -38,32 +38,33 @@ def plot_mrs(data, figure, title=None, fit_gaussian=False):
     figure.tight_layout()
 
 def get_mrs_info(data):
+    if not isinstance(data, list): data = [data]
     f = data[0]
     info = ""
     if len(data[0].shape) == 1: # if coils are combined
-        if len(data) == 1: info += f"\n\tSNR: {str(estimate_snr(data[0]))}"
+        if len(data) == 1: info += f"\nSNR: {str(estimate_snr(data[0]))}"
         else: info += f"Mean SNR: {str(np.mean(np.array([estimate_snr(d) for d in data])))}"
     info += "\n"
-    if hasattr(f, "np"): info += f"\n\tNumber of points: {f.np}"
-    info += f"\n\tNumber of coils: {data[0].shape[0] if len(data[0].shape) > 1 else 1}"
-    if "ave_per_rep" in f.metadata:
-        info += f"\n\tNumber of shots per average: {f.metadata['ave_per_rep']}"
-    info += f"\n\tNumber of averages: {len(data)}"
-    if "ave_per_rep" in f.metadata:
-        info += "→ {len(data) / f.metadata['ave_per_rep']}"
+    if hasattr(f, "np"): info += f"\nNumber of points: {f.np}"
+    info += f"\nNumber of coils: {data[0].shape[0] if len(data[0].shape) > 1 else 1}"
+    if hasattr(f, "metadata") and f.metadata is not None and "ave_per_rep" in f.metadata:
+        info += f"\nNumber of shots per average: {f.metadata['ave_per_rep']}"
+    info += f"\nNumber of averages: {len(data)}"
+    if hasattr(f, "metadata") and f.metadata is not None and "ave_per_rep" in f.metadata and f.metadata["ave_per_rep"] > 1:
+        info += f"→ {int(len(data) / f.metadata['ave_per_rep'])}"
     info += "\n"
-    if hasattr(f, "f0"): info += f"\n\tScanner frequency (MHz): {f.f0}"
-    if hasattr(f, "dt"): info += f"\n\tDwell time (s): {f.dt}"
-    if hasattr(f, "df"): info += f"\n\tFrequency delta (Hz): {f.df}"
-    if hasattr(f, "sw"): info += f"\n\tSpectral Width (Hz): {f.sw}"
-    if hasattr(f, "te"): info += f"\n\tEcho time (ms): {f.te}"
-    if hasattr(f, "tr"): info += f"\n\tRepetition time (ms): {f.tr}"
-    info += f"\n\tPPM range: {[f.hertz_to_ppm(-f.sw / 2.0), f.hertz_to_ppm(f.sw / 2.0)]}"
+    if hasattr(f, "f0"): info += f"\nScanner frequency (MHz): {f.f0}"
+    if hasattr(f, "dt"): info += f"\nDwell time (s): {f.dt}"
+    if hasattr(f, "df"): info += f"\nFrequency delta (Hz): {f.df}"
+    if hasattr(f, "sw"): info += f"\nSpectral Width (Hz): {f.sw}"
+    if hasattr(f, "te"): info += f"\nEcho time (ms): {f.te}"
+    if hasattr(f, "tr"): info += f"\nRepetition time (ms): {f.tr}"
+    info += f"\nPPM range: {[f.hertz_to_ppm(-f.sw / 2.0), f.hertz_to_ppm(f.sw / 2.0)]}"
     info += "\n"
     if f.transform is not None:
-        info += f"\n\tTransform:\n{f.transform}"
-        info += f"\n\tCentre: {f.centre}"
-    if hasattr(f, "metadata") and hasattr(f.metadata, "items"): info += "\n\tMetadata: " + "\n\t\t".join([f"{k}: {v}" for k, v in f.metadata.items()])
+        info += f"\nTransform:\n{f.transform}"
+        info += f"\nCentre: {f.centre}"
+    if hasattr(f, "metadata") and hasattr(f.metadata, "items"): info += "\nMetadata: " + "\n\t".join([f"{k}: {v}" for k, v in f.metadata.items()])
     return info
 
 def estimate_snr(data: MRSData):
@@ -166,11 +167,11 @@ def plot_coord(lcmdata, figure, title=None):
 
 
 def get_coord_info(lcmdata):
-    dtab = '\n\t\t'
+    dtab = '\n'
     info = (
-        f"\n\tNumber of points: {len(lcmdata['ppm'])}\n\tNumber of metabolites: {len(lcmdata['conc'])} ({lcmdata['nfit']} fitted)\n\t0th-order phase: {lcmdata['ph0']}"
-        f"\n\t1st-order phase: {lcmdata['ph1']}\n\tFWHM: {lcmdata['linewidth']}\n\tSNR: {lcmdata['SNR']}\n\tData shift: {lcmdata['datashift']}\n"
-        f"""\tMetabolites:\n\t\t{dtab.join([f"{c['name']}: {str(c['c'])} (±{str(c['SD'])}%, {lcmdata['crnaa']}: {str(c['c_cr'])})" for c in lcmdata['conc']])}\n"""
+        f"\nNumber of points: {len(lcmdata['ppm'])}\nNumber of metabolites: {len(lcmdata['conc'])} ({lcmdata['nfit']} fitted)\n0th-order phase: {lcmdata['ph0']}"
+        f"\n1st-order phase: {lcmdata['ph1']}\nFWHM: {lcmdata['linewidth']}\nSNR: {lcmdata['SNR']}\nData shift: {lcmdata['datashift']}\n"
+        f"""Metabolites:\n{dtab.join([f"{c['name']}: {str(c['c'])} (±{str(c['SD'])}%, {lcmdata['crnaa']}: {str(c['c_cr'])})" for c in lcmdata['conc']])}\n"""
     )
     return info
 
@@ -179,11 +180,11 @@ def read_file(filepath, canvas, text, coil_combine=False, fit_gaussian=False):
     if filepath.lower().endswith(".coord"):
         f = ReadlcmCoord(filepath)
         if f is None: return
-        text.SetValue(f"File: {filepath}\n{get_coord_info(f)}")
+        text.SetValue(f"File: {filepath}\n\n{get_coord_info(f)}")
         plot_coord(f, canvas.figure, title=filepath)
     else:
         f, _, _, _= load_file(filepath)
-        text.SetValue(f"File: {filepath}\n{get_mrs_info(f)}")
+        text.SetValue(f"File: {filepath}\n\n{get_mrs_info(f)}")
         if coil_combine: 
             if len(f[0].shape) > 1:
                 from nodes._CoilCombinationAdaptive import coil_combination_adaptive

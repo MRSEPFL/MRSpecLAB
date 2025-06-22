@@ -91,7 +91,8 @@ def save_control(filepath, params):
             fout.write(f" {key} = {value}\n")
         fout.write(" $END\n")
 
-def save_nifti(filepath, data, seq="PRESS"):
+# find nifti spec at https://github.com/NIFTI-Imaging/nifti_clib/blob/master/niftilib/nifti1.h
+def save_nifti(filepath, data, seq="unknown_seq"):
     if isinstance(data, list):
         if len(data) == 0: return utils.log_error(f"Data list is empty, cannot save {filepath}.")
         if not isinstance(data[0], np.ndarray):
@@ -100,20 +101,21 @@ def save_nifti(filepath, data, seq="PRESS"):
     elif isinstance(data, np.ndarray):
         data = [data]
     else: return utils.log_error(f"Data is not a list or numpy array, cannot save {filepath}.")
-    img = nib.nifti1.Nifti1Image(np.array(data).T.reshape((1, 1, 1, len(data[0]), len(data))), affine=np.eye(4), dtype=np.complex128)
-    header = img.header
-    header['descrip'] = (seq + "_" + str(data[0].te) + "ms_" + str(data[0].f0) + "Hz_" + str(len(data[0])) + "pts").encode('utf-8')
-    if header['descrip'].nbytes > 80: 
-        utils.log_warning("Description exceeds 80 bytes, truncating to fit NIfTI header limit.")
-        header['descrip'] = header['descrip'][:80]
+    affine = data[0].transform if hasattr(data[0], 'transform') and data[0].transform is not None else np.eye(4)
+    img = nib.nifti1.Nifti1Image(np.array(data).swapaxes(0, 1).reshape((1, 1, 1, len(data[0]), len(data))), affine=affine, dtype=np.complex128)
+    img.header['pixdim'][4] = data[0].dt * 1e3 # ms
+    img.header['xyzt_units'] = 16 + 2 # 16: ms, 2: mm
+    img.header['datatype'] = 1792 # DT_COMPLEX128
+    img.header['intent_name'] = "mrs_v0_9"
+    img.header['descrip'] = (seq + "_" + str(data[0].te) + "ms_" + str(round(data[0].f0, 1)) + "Hz_" + str(len(data[0])) + "pts").encode('utf-8')
+    if img.header['descrip'].nbytes > 80: img.header['descrip'] = img.header['descrip'][:80]
     metadata = {
-        "SpectrometerFrequency": [data[0].f0],
-        "EchoTime": data[0].te,
-        "RepetitionTime": getattr(data[0], 'tr', None),
+        "SpectrometerFrequency": [data[0].f0], # MHz
+        "EchoTime": data[0].te, # ms
+        "RepetitionTime": getattr(data[0], 'tr', None), # ms
         "ResonantNucleus": [getattr(data[0], 'nucleus', "unknown")],
         "Sequence": seq,
+        "dim_5": "DIM_MEAS"
     }
-    json_metadata = json.dumps(metadata).encode('utf-8')
-    ext = nib.nifti1.Nifti1Extension('mrs', json_metadata)
-    img.header.extensions.append(ext)
+    img.header.extensions.append(nib.nifti1.Nifti1Extension('mrs', json.dumps(metadata).encode('utf-8')))
     nib.save(img, filepath)
