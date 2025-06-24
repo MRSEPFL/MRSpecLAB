@@ -3,7 +3,9 @@
 # Simple download and double-click application for windows users to process MRS(I) data.
 
 --> download example datasets, basis sets and pipelines from [zenodo](https://zenodo.org/records/14866163).
+
 --> .exe and .ext (Windows/Linux) executables available in the newest release.
+
 --> source code available for other OS in this repository.
 
 The MRSpecLAB platform is closely described in this publication: [PUBLICATION](insert link). For help please contact us under: MRSpecLAB@gmail.com.
