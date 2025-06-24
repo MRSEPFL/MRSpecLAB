@@ -2,10 +2,11 @@
 
 # Simple download and double-click application for windows users to process MRS(I) data.
 
---> download the .zip from [zenodo](https://zenodo.org/records/14866163) for Windows.
+--> download example datasets, basis sets and pipelines from [zenodo](https://zenodo.org/records/14866163).
+--> .exe and .ext (Windows/Linux) executables available in the newest release.
 --> source code available for other OS in this repository.
 
-The MRspecLAB platform is closely described in this publication: [PUBLICATION](insert link). For help please contact us under: mrspeclab@gmail.com.
+The MRSpecLAB platform is closely described in this publication: [PUBLICATION](insert link). For help please contact us under: MRSpecLAB@gmail.com.
 If you would like to be kept updated about the newest additions and updates, please subscribe to the [mailinglist](https://forms.gle/AQjCQu7JHhiadrfx8).
 
 A detailed user manual can be found in [MANUAL.md](/MANUAL.md).
@@ -46,7 +47,7 @@ On a Linux system, the pip command given above will probably try to build the wx
 (Re-)running `pip install -r requirements.txt` should verify that installation and ensure no other packages are missing.
 
 ## License and used libraries
-MRspecLAB is released under the Apache 2.0 license.
+MRSpecLAB is released under the Apache 2.0 license.
 
 Code was taken and modified from the 'suspect' library for file-reading and processing functions and the `gsnodegraph` library for the editor panel. Windows and Linux binaries for LCModel were compiled from the source code on [Georg Oeltzschner's repository](https://github.com/schorschinho/LCModel), and compressed and shipped alongside our application for a straight-forward installation. Standardised MRS header reading was taken and slightly modified from the [REMY project](https://github.com/agudmundson/mrs_in_mrs), reading in data, data conversion and header information read-in were taken from [spec2nii](https://github.com/wtclarke/spec2nii).
 
