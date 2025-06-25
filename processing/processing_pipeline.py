@@ -364,7 +364,7 @@ def analyseResults(self):
         with open(pkl_arg_path, "wb") as f:
             pickle.dump([seg_files, centre, results[0].transform, pkl_result_path], f)
         if hasattr(sys, '_MEIPASS'): # running from pyinstaller executable
-            helper_exe = os.path.join(sys._MEIPASS, "read_ants_image.exe")
+            helper_exe = os.path.join(sys._MEIPASS, "read_ants_image" + (".exe" if utils.iswindows() else ""))
             utils.log_debug(f"Calling ANTs subprocess with {helper_exe}.")
             result = subprocess.run([helper_exe, pkl_arg_path], capture_output=True, text=True)
         else: # running from source code
