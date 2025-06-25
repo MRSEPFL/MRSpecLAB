@@ -1,7 +1,7 @@
 import wx, os, sys, shutil, zipfile, time, subprocess
 import numpy as np
 import matplotlib
-import ants
+# import ants
 import datetime
 import traceback
 import threading
@@ -342,27 +342,34 @@ def analyseResults(self):
         else: labels = [str(i) for i in range(len(results[0]))]
     utils.log_debug(f"Using labels {labels}.")
 
+    # Setup workpath
+    workpath = os.path.join(os.path.dirname(self.outputpath_base), "temp")
+    if os.path.exists(workpath): shutil.rmtree(workpath)
+    os.mkdir(workpath)
+    utils.log_debug(f"LCModel/ANTs work folder: {workpath}")
+
     # Segmentation and water concentration (only for 1H)
     wconc = None
-    if nucleus == "1H" and self.wm_file_user and self.gm_file_user and self.csf_file_user:
-        try: centre = results[0].centre
-        except Exception as e:
-            utils.log_error(f"Could not retrieve voxel location from data: {e}")
-            return False
-        try:
-            wm_img = ants.image_read(self.wm_file_user)
-            gm_img = ants.image_read(self.gm_file_user)
-            csf_img = ants.image_read(self.csf_file_user)
-        except Exception as e:
-            utils.log_error(f"Could not load segmentation files:\n\t{e}")
-            return False
-
-        thickness = np.array([np.max(np.abs(np.array(results[0].transform)[:3, i])) for i in range(3)])
-        i1 = ants.transform_physical_point_to_index(wm_img, centre - thickness / 2).astype(int)
-        i2 = ants.transform_physical_point_to_index(wm_img, centre + thickness / 2).astype(int)
-        for i in range(3):
-            if i1[i] > i2[i]: i1[i], i2[i] = i2[i], i1[i]
-        wm_sum, gm_sum, csf_sum = tuple([np.sum(img.numpy()[i1[0]:i2[0], i1[1]:i2[1], i1[2]:i2[2]]) for img in [wm_img, gm_img, csf_img]])
+    seg_files = [self.wm_file_user, self.gm_file_user, self.csf_file_user]
+    if all(seg_files):
+        if not all(os.path.exists(f) for f in seg_files):
+            utils.log_error(f"Could not find segmentation files."); return False
+        if not hasattr(results[0], "centre"):
+            utils.log_error(f"Could not retrieve voxel location from input data."); return False
+        centre = results[0].centre
+        # ANTs and WX use conflicting C++ backends and crash when run in the same process..
+        import pickle
+        pkl_arg_path = os.path.join(workpath, "tmp.pkl")
+        pkl_result_path = os.path.join(workpath, "tmp2.pkl")
+        script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "./inout/read_ants_image.py")
+        with open(pkl_arg_path, "wb") as f:
+            pickle.dump([seg_files, centre, results[0].transform, pkl_result_path], f)
+        result = subprocess.run([sys.executable, script_path, pkl_arg_path], capture_output=True, text=True)
+        if result.returncode != 0:
+            utils.log_error(f"Analysing the segmentation images failed:\n{result.stdout}\n{result.stderr}"); return False
+        with open(pkl_result_path, "rb") as f:
+            wm_gm_csf_sums = pickle.load(f)
+        wm_sum, gm_sum, csf_sum = tuple(wm_gm_csf_sums)
         seg_sum = wm_sum + gm_sum + csf_sum
         if seg_sum == 0:
             utils.log_warning("Segmentation sums to zero. Skipping water concentration calculation.")
@@ -375,8 +382,7 @@ def analyseResults(self):
             utils.log_info("Calculated WM = ", f_wm, ", GM = ", f_gm, ", CSF = ", f_csf, " → Water conc. = ", wconc, ".")
     else:
         if nucleus != "1H": utils.log_info("Segmentation and water concentration calculation skipped for nucleus ", nucleus, ".")
-        else: utils.log_warning("Segmentation files not provided, water concentration will be ignored.")
-    print("seg files")
+        utils.log_warning("Segmentation files not provided, water concentration will be ignored.")
 
     # Create work folder and copy LCModel executable
     lcmodelfile = os.path.join(self.programpath, "lcmodel", "lcmodel")  # Linux exe
@@ -400,12 +406,6 @@ def analyseResults(self):
 
     # Ensure executable permissions on Linux
     if utils.islinux(): os.chmod(lcmodelfile, 0b111000000)
-    
-    # Setup workpath
-    workpath = os.path.join(os.path.dirname(self.outputpath_base), "temp")
-    if os.path.exists(workpath): shutil.rmtree(workpath)
-    os.mkdir(workpath)
-    utils.log_debug(f"LCModel work folder: {workpath}")
 
     # Copy LCModel executable to workpath
     if utils.iswindows(): command = f"""copy "{lcmodelfile}" "{workpath}" """
@@ -429,7 +429,6 @@ def analyseResults(self):
     def processVoxel(result, label):
         """Process a single voxel for LCModel fitting."""
         label = "lcm" if label == "0" else label
-        result_label_np = np.array(result)
         rparams = {
             "KEY": 123456789,
             "FILRAW": f"./{label}.RAW",
