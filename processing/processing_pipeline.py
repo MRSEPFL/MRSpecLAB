@@ -43,8 +43,7 @@ def loadInput(self):
         except: utils.log_warning("Error loading file: " + filepath + "\n\t" + str(sys.exc_info()[0]))
         else:
             if data is None:
-                utils.log_warning("Couldn't load file: " + filepath)
-                continue
+                utils.log_warning("Couldn't load file: " + filepath); continue
             if isinstance(data, list):
                 self.originalData += data
             elif len(data.shape) > 1:
@@ -61,11 +60,9 @@ def loadInput(self):
             utils.log_debug("Loaded file: " + filepath)
     
     if len(self.originalData) == 0:
-        utils.log_error("No files loaded")
-        return False
+        utils.log_error("No files loaded"); return False
     if self.header is None:
-        utils.log_error("No header found")
-        return False
+        utils.log_error("No header found"); return False
     
     nucleus = self.originalData[0].nucleus
     if nucleus in (None, 'unknown'):
@@ -128,16 +125,14 @@ def loadInput(self):
     seqstr = None
     for key in ["SequenceString", "Sequence"]:
         if key in self.header.keys():
-            seqstr = self.header[key]
-            break
+            seqstr = self.header[key]; break
     self.sequence = None
     if seqstr is None: utils.log_warning("Sequence not found in header")
     else:
         for k, v in utils.supported_sequences.items():
             for seq in v:
                 if seq in seqstr:
-                    self.sequence = k
-                    break
+                    self.sequence = k; break
         if self.sequence is not None:
             utils.log_info("Sequence detected: ", seqstr + " → " + self.sequence)
 
@@ -222,15 +217,16 @@ def processStep(self, step, nstep):
         if not os.path.exists(steppath): os.mkdir(steppath)
         filepath = os.path.join(steppath, "data")
         if not os.path.exists(filepath): os.mkdir(filepath)
-        for i, d in enumerate(dataDict["output"]):
-            if d is not None: save_raw(os.path.join(filepath, "metab_" + str(i+1) + ".RAW"), d, seq=self.sequence)
-            else: utils.log_warning(f"Data for index {i} is None, skipping save.")
-        for i, d in enumerate(dataDict["wref_output"]):
-            if d is not None: save_raw(os.path.join(filepath, "water_" + str(i+1) + ".RAW"), d, seq=self.sequence)
-            else: utils.log_warning(f"Water reference data for index {i} is None, skipping save.")
-        save_nifti(os.path.join(filepath, "metab.nii"), dataDict['output'], seq=self.sequence)
-        if dataDict["wref_output"] is not None and len(dataDict["wref_output"]) > 0:
-            save_nifti(os.path.join(filepath, "water.nii"), dataDict["wref_output"], seq=self.sequence)
+        with self.data_lock:
+            for i, d in enumerate(dataDict["output"]):
+                if d is not None: save_raw(os.path.join(filepath, "metab_" + str(i+1) + ".RAW"), d, seq=self.sequence)
+                else: utils.log_warning(f"Data for index {i} is None, skipping save.")
+            for i, d in enumerate(dataDict["wref_output"]):
+                if d is not None: save_raw(os.path.join(filepath, "water_" + str(i+1) + ".RAW"), d, seq=self.sequence)
+                else: utils.log_warning(f"Water reference data for index {i} is None, skipping save.")
+            save_nifti(os.path.join(filepath, "metab.nii"), dataDict['output'], seq=self.sequence)
+            if dataDict["wref_output"] is not None and len(dataDict["wref_output"]) > 0:
+                save_nifti(os.path.join(filepath, "water.nii"), dataDict["wref_output"], seq=self.sequence)
 
     # canvas plot
     if not self.fast_processing:
@@ -345,7 +341,6 @@ def analyseResults(self):
     
     if self.basis_file is None:
         utils.log_warning("Basis set not found:\n\t", basis_file_gen)
-        # wx.CallAfter(self.fitting_frame.Show)
         run_blocking(self.fitting_frame.Show)
         wx.CallAfter(self.fitting_frame.SetFocus)
         while self.fitting_frame.IsShown():
@@ -581,10 +576,8 @@ def analyseResults(self):
                 read_file(filepath, self.matplotlib_canvas, self.file_text)
                 filepath_pdf = os.path.join(savepath, "lcmodel.pdf")
                 figure.savefig(filepath_pdf, dpi=600, format='pdf')
-            except Exception as e:
-                utils.log_warning(f"Failed to process coord file for {label}: {e}")
-        else:
-            utils.log_warning(f"LCModel output not found for {label}")
+            except Exception as e: utils.log_warning(f"Failed to process coord file for {label}: {e}")
+        else: utils.log_warning(f"LCModel output not found for {label}")
 
     if self.issvs:
         for result, label in zip(temp_results, labels):
@@ -600,7 +593,7 @@ def analyseResults(self):
 
     # Clean up workpath
     try:
-        # shutil.rmtree(workpath)
+        shutil.rmtree(workpath)
         utils.log_debug("Workpath deleted successfully.")
     except Exception as e:
         utils.log_warning(f"Failed to delete workpath: {e}")
@@ -613,13 +606,10 @@ def processPipeline(self):
         if self.current_step == 0:
             wx.CallAfter(self.plot_box.Clear)
             wx.CallAfter(self.plot_box.AppendItems, "")
-            if not hasattr(self, 'originalData') or self.originalData is None:
-                if not loadInput(self):
-                    utils.log_error("Error loading input")
-                    wx.CallAfter(self.reset)
-                    return
-            else:
-                utils.log_debug("Skipping loadInput because self.originalData is already loaded.")
+            if not loadInput(self):
+                utils.log_error("Error loading input")
+                wx.CallAfter(self.reset)
+                return
             
         if 0 <= self.current_step and self.current_step <= len(self.steps) - 1:
             # self.retrieve_pipeline() # bad way to update any changed parameters
@@ -640,7 +630,10 @@ def processPipeline(self):
                         f.write("Frequency shift: " + str(self.manual_adjustment_params[0]) + " PPM\n" \
                                 "0th order phase shift: " + str(self.manual_adjustment_params[1]) + "°\n" \
                                 "1st order phase shift: " + str(self.manual_adjustment_params[2]) + "°/PPM\n")
-            else: self.reset()
+            else:
+                utils.log_error("Error analysing results")
+                wx.CallAfter(self.reset)
+                return
 
         self.current_step += 1
         wx.CallAfter(self.plot_box.SetSelection, self.current_step)
