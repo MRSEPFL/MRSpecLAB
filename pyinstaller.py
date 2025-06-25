@@ -10,7 +10,7 @@ PyInstaller.__main__.run([
     '--onefile',
     '--console',
     '--clean',
-    '--name', 'read_ants_image'
+    '--exclude-module', 'wxPython'
 ])
 
 options = [
@@ -37,9 +37,7 @@ options = [
     '--hidden-import', 'matplotlib.backends.backend_svg',
 	'--hidden-import', 'nifti_mrs.standard',
     # exclude
-    '--exclude-module', 'cv2',
-    '--exclude-module', 'babel',
-    '--exclude-module', 'PyQt5',
+    '--exclude-module', 'antspyx'
 ]
 
 nifti_mrs_data = PyInstaller.utils.hooks.collect_data_files('nifti_mrs')
