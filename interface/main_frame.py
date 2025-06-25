@@ -159,8 +159,8 @@ class MainFrame(LayoutFrame):
         self.button_step_processing.Enable()
         self.button_auto_processing.Enable()
         self.button_nplot.Enable()
-        if self.current_step >= len(self.steps):
-            self.button_step_processing.SetBitmap(self.run_bmp)
+        # if self.current_step >= len(self.steps):
+        #     self.button_step_processing.SetBitmap(self.run_bmp)
         self.button_auto_processing.SetBitmap(self.autorun_bmp)
         self.current_step = 0
         self.originalData = None

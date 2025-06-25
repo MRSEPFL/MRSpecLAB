@@ -132,7 +132,6 @@ class FilePanel(wx.Panel):
         if not any([filepath.lower().endswith(ext) for ext in utils.supported_files]):
             return utils.log_error("Invalid file type")
         child = PlotFrame(filepath, is_viewer=self.is_viewer)
-        read_file(filepath, child.canvas, child.text, self.is_viewer)
         event.Skip()
     
     def on_drop_files(self, filenames):

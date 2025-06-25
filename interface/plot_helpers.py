@@ -176,6 +176,7 @@ def get_coord_info(lcmdata):
     return info
 
 def read_file(filepath, canvas, text, coil_combine=False, fit_gaussian=False):
+    ''' returns whether data is multi-coil '''
     canvas.clear()
     if filepath.lower().endswith(".coord"):
         f = ReadlcmCoord(filepath)
@@ -194,3 +195,4 @@ def read_file(filepath, canvas, text, coil_combine=False, fit_gaussian=False):
         title = filepath.rsplit(os.path.sep, 1)[1]
         plot_mrs(f, canvas.figure, title=title, fit_gaussian=fit_gaussian)
     canvas.draw()
+    return len(f[0].shape) > 1
