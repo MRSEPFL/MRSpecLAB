@@ -361,10 +361,16 @@ def analyseResults(self):
         import pickle
         pkl_arg_path = os.path.join(workpath, "tmp.pkl")
         pkl_result_path = os.path.join(workpath, "tmp2.pkl")
-        script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "./inout/read_ants_image.py")
         with open(pkl_arg_path, "wb") as f:
             pickle.dump([seg_files, centre, results[0].transform, pkl_result_path], f)
-        result = subprocess.run([sys.executable, script_path, pkl_arg_path], capture_output=True, text=True)
+        if hasattr(sys, '_MEIPASS'): # running from pyinstaller executable
+            helper_exe = os.path.join(sys._MEIPASS, "read_ants_image.exe")
+            utils.log_debug(f"Calling ANTs subprocess with {helper_exe}.")
+            result = subprocess.run([helper_exe, pkl_arg_path], capture_output=True, text=True)
+        else: # running from source code
+            utils.log_debug(f"Calling ANTs subprocess with {sys.executable}.")
+            script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "./inout/read_ants_image.py")
+            result = subprocess.run([sys.executable, script_path, pkl_arg_path], capture_output=True, text=True)
         if result.returncode != 0:
             utils.log_error(f"Analysing the segmentation images failed:\n{result.stdout}\n{result.stderr}"); return False
         with open(pkl_result_path, "rb") as f:
@@ -542,7 +548,7 @@ def analyseResults(self):
         for result, label in zip(temp_results, labels):
             processVoxel(result, label)
     else:
-        xdim, ydim, zdim, npoints = np.array(temp_results).shape
+        xdim, ydim, zdim, _ = np.array(temp_results).shape
         for i in range(xdim):
             for j in range(ydim):
                 for k in range(zdim):
@@ -550,15 +556,9 @@ def analyseResults(self):
                     label = "_".join([str(i+1),str(j+1),str(k+1)])
                     processVoxel(result_data, label)
 
-    # Clean up workpath
-    try:
-        shutil.rmtree(workpath)
-        utils.log_debug("Workpath deleted successfully.")
-    except Exception as e:
-        utils.log_warning(f"Failed to delete workpath: {e}")
+    shutil.rmtree(workpath) # Clean up workpath
     utils.log_info("LCModel processing complete")
     return True
-
 
 def processPipeline(self):
     try:

@@ -1,7 +1,17 @@
 # import os
-import sys ; sys.setrecursionlimit(sys.getrecursionlimit() * 5)
+import os, sys
+sys.setrecursionlimit(sys.getrecursionlimit() * 5)
 import PyInstaller.__main__
 import PyInstaller.utils.hooks
+
+PyInstaller.__main__.run([
+    'inout/read_ants_image.py',
+    '--noconfirm',
+    '--onefile',
+    '--console',
+    '--clean',
+    '--name', 'read_ants_image'
+])
 
 options = [
     'MRSpecLAB.py',
@@ -35,6 +45,10 @@ options = [
 nifti_mrs_data = PyInstaller.utils.hooks.collect_data_files('nifti_mrs')
 for src, dest in nifti_mrs_data:
     options += ['--add-data', f'{src}:{dest}']
+
+helper_exe_path = os.path.join('dist', 'read_ants_image' + ('.exe' if os.name == 'nt' else ''))
+if os.path.exists(helper_exe_path):
+    options += ['--add-data', f'{helper_exe_path}:.']
 
 # if os.name == 'posix' and "24.04" in platform.version():
 # 	options += [
