@@ -36,6 +36,7 @@ class LogEvent(wx.PyCommandEvent):
     def GetText(self): return self.text
     def GetColour(self): return self.colour
 
+text_dst: wx.TextCtrl
 def init_logging(text, _debug=False):
     global text_dst, debug
     text_dst = text
@@ -62,10 +63,11 @@ def on_log(event):
             text_dst.WriteText(text)
             text_dst.EndTextColour()
             text_dst.Newline()
-            text_dst.SetScrollPos(wx.VERTICAL, text_dst.GetScrollRange(wx.VERTICAL))
+            # text_dst.SetScrollPos(wx.VERTICAL, text_dst.GetScrollRange(wx.VERTICAL))
             text_dst.ShowPosition(text_dst.GetLastPosition())
-    if wx.IsMainThread(): do_log()
-    else: wx.CallAfter(do_log)
+    # if wx.IsMainThread(): do_log()
+    # else: wx.CallAfter(do_log)
+    do_log()
     event.Skip()
 
 def log_info(*args):

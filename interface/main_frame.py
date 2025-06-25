@@ -53,13 +53,6 @@ class MainFrame(LayoutFrame):
 
         self.data_lock = threading.Lock()
         
-        #self.background_image = self.load_background_image() #check what it does
-
-        # self.param = {
-        #     "vmin": None,
-        #     "vmax": None,
-        # }
-
         self.brain_image = {
             "selected_img_path": None,
             "selected_img": None,
@@ -67,7 +60,6 @@ class MainFrame(LayoutFrame):
             "slice_index": None,
             "selected_img_rotation": None,
         }
-
 
         self.data_to_plot = {
             "dir": None,
@@ -159,8 +151,6 @@ class MainFrame(LayoutFrame):
         self.button_step_processing.Enable()
         self.button_auto_processing.Enable()
         self.button_nplot.Enable()
-        # if self.current_step >= len(self.steps):
-        #     self.button_step_processing.SetBitmap(self.run_bmp)
         self.button_auto_processing.SetBitmap(self.autorun_bmp)
         self.current_step = 0
         self.originalData = None
@@ -293,31 +283,25 @@ class MainFrame(LayoutFrame):
         self.matplotlib_canvas.draw()
         utils.log_info("Start update main canvas")
 
-        # if (self.brain_image["selected_img"] is None or self.brain_image["selected_img"].size == 0) and \
-        if (self.brain_image["selected_img_path"] is None or self.brain_image["selected_img"] is None) and \
-        (self.data_to_plot["coord"] is None):
+        if (self.brain_image["selected_img_path"] is None or self.brain_image["selected_img"] is None) and self.data_to_plot["coord"] is None:
             return utils.log_info("Nothing to plot")
         ax = fig.add_subplot(111)
 
         # Handle background image
-        if self.brain_image["selected_img_path"]: 
-            if self.brain_image["selected_img"] is not None:
-                if self.brain_image["selected_img"].size > 0:
-                    views = {
-                        0: self.brain_image["selected_img"][self.brain_image['slice_index'], :, :],
-                        1: self.brain_image["selected_img"][:, self.brain_image['slice_index'], :],
-                        2: self.brain_image["selected_img"][:, :, self.brain_image['slice_index']]
-                    }
-                    background_slice = views.get(self.brain_image["selected_img_view"])
-
-                if background_slice is None:
-                    utils.log_error("Selected image view is incorrect!")
-                    return
-
-                background_slice = rotate(
-                    background_slice, self.brain_image["selected_img_rotation"], reshape=False, mode='nearest'
-                )
-                ax.imshow(background_slice, cmap='gray', interpolation='nearest')
+        if self.brain_image["selected_img_path"] and self.brain_image["selected_img"]:
+            if self.brain_image["selected_img"].size > 0:
+                views = {
+                    0: self.brain_image["selected_img"][self.brain_image['slice_index'], :, :],
+                    1: self.brain_image["selected_img"][:, self.brain_image['slice_index'], :],
+                    2: self.brain_image["selected_img"][:, :, self.brain_image['slice_index']]
+                }
+                background_slice = views.get(self.brain_image["selected_img_view"])
+            if background_slice is None:
+                return utils.log_error("Selected image view is incorrect!")
+            background_slice = rotate(
+                background_slice, self.brain_image["selected_img_rotation"], reshape=False, mode='nearest'
+            )
+            ax.imshow(background_slice, cmap='gray', interpolation='nearest')
 
         # Handle metabolite concentration map
         if self.data_to_plot["conc_map_to_plot"] is not None and self.data_to_plot["conc_map_to_plot"].size > 0:
@@ -333,7 +317,6 @@ class MainFrame(LayoutFrame):
                 mask = create_brain_mask(background_slice)
                 concentration_masked = np.where(mask == 1, concentration_masked, np.nan)
 
-            # cax = ax.imshow(concentration_masked, cmap='coolwarm', interpolation='nearest', alpha=1, vmin=self.param["vmin"], vmax=self.param["vmax"])
             cax = ax.imshow(concentration_masked, cmap='coolwarm', interpolation='nearest', alpha=1, vmin=None, vmax=None)
             fig.colorbar(cax, ax=ax, orientation='vertical', label='Concentration')
             ax.set_title(f"Slice {self.data_to_plot['slice']} (min={vmin:.2g}, max={vmax:.2g})")
@@ -342,18 +325,15 @@ class MainFrame(LayoutFrame):
         self.matplotlib_canvas.draw_idle()
 
     def on_open_external_nodes(self, event=None):
-            dirDialog = wx.DirDialog(self.Parent, "Select a folder for the customer nodes library", style=wx.DD_DIR_MUST_EXIST)
-            if dirDialog.ShowModal() == wx.ID_CANCEL: return
-            temp = os.path.join(dirDialog.GetPath())
-            if not os.path.exists(temp):
-                try: os.mkdir(temp)
-                except: return utils.log_error(f"Could not create folder {temp}")
-            self.external_nodes_library = temp
-            self.copy_customer_processing_scripts()
-            self.retrieve_steps()
-            self.retrieve_pipeline()
-            self.update_statusbar()
-            if event is not None: event.Skip()
+        dirDialog = wx.DirDialog(self.Parent, "Select a folder for the customer nodes library", style=wx.DD_DIR_MUST_EXIST)
+        if dirDialog.ShowModal() == wx.ID_CANCEL: return
+        temp = os.path.join(dirDialog.GetPath())
+        if not os.path.exists(temp):
+            try: os.mkdir(temp)
+            except: return utils.log_error(f"Could not create folder {temp}")
+        self.external_nodes_library = temp
+        self.on_reload()
+        if event is not None: event.Skip()
 
     def on_change_output(self, event=None):
         dirDialog = wx.DirDialog(self.Parent, "Choose a new output folder", style=wx.DD_DIR_MUST_EXIST)
@@ -368,23 +348,12 @@ class MainFrame(LayoutFrame):
     def on_open_fitting(self, event):
         self.fitting_frame.Show()
         event.Skip()
-    
-    # def on_show_debug(self, event):
-    #     temp = self.show_debug_button.GetValue()
-    #     self.debug_button.Show(temp)
-    #     self.reload_button.Show(temp)
-    #     self.debug_button.Raise()
-    #     self.reload_button.Raise()
-    #     self.right_panel.Lower()
-    #     self.show_debug_button.SetLabel(("Hide" if temp else "Show") + " debug options")
-    #     self.Layout()
-    #     if event is not None: event.Skip()
 
-    def on_toggle_debug(self, event):
+    def on_toggle_debug(self, event=None):
         utils.set_debug(self.debug_button.GetValue())
         if event is not None: event.Skip()
     
-    def on_reload(self, event):
+    def on_reload(self, event=None):
         self.copy_customer_processing_scripts()
         self.retrieve_steps()
         self.retrieve_pipeline()
@@ -420,6 +389,7 @@ class MainFrame(LayoutFrame):
                     event.Skip()
                     return
             utils.log_warning("Step not found")
+        if event is not None: event.Skip()
 
     def retrieve_pipeline(self):
         current_node = self.pipeline_frame.nodegraph.GetInputNode()

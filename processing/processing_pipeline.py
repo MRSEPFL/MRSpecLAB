@@ -73,16 +73,12 @@ def loadInput(self):
         has_phase_alignment = any("PhaseAlignment31P" in step.__class__.__name__ for step in self.steps) or any("TEBasedPhaseCorrecton31P" in step.__class__.__name__ for step in self.steps)
         if not has_phase_alignment:
             def dialog_func():
-                dlg = wx.MessageDialog(
-                    self,
+                dlg = wx.MessageDialog(self,
                     "31P data detected, but the current pipeline does not include the 'PhaseAlignment31P' step.\n"
                     "Would you like to load the standard 31P pipeline?",
-                    "Pipeline Mismatch",
-                    wx.YES_NO | wx.ICON_QUESTION
+                    "Pipeline Mismatch", wx.YES_NO | wx.ICON_QUESTION
                 )
-                response = dlg.ShowModal()
-                dlg.Destroy()
-                return response
+                response = dlg.ShowModal(); dlg.Destroy(); return response
             response = run_blocking(dialog_func)
             if response == wx.ID_YES:
                 standard_pipeline_path = os.path.join(os.getcwd(), "31P_standard_pipeline.pipe")
@@ -246,14 +242,10 @@ def saveDataPlot(self):
             utils.log_debug("Saved result to " + filepath)
         return
 
-    # 2. Show the same two-button dialog in all modes
     if self.issvs:
         def man_adj_dialog():
-            dlg = wx.MessageDialog(None, "Do you want to manually adjust frequency and phase shifts of the result?",
-                                "", wx.YES_NO | wx.ICON_INFORMATION)
-            button_clicked = dlg.ShowModal()
-            dlg.Destroy()
-            return button_clicked
+            dlg = wx.MessageDialog(None, "Do you want to manually adjust frequency and phase shifts of the result?", "", wx.YES_NO | wx.ICON_INFORMATION)
+            button_clicked = dlg.ShowModal(); dlg.Destroy(); return button_clicked
         button_clicked = run_blocking(man_adj_dialog)
         if button_clicked == wx.ID_YES:
             wx.CallAfter(self.matplotlib_canvas.clear)
@@ -261,11 +253,7 @@ def saveDataPlot(self):
             manual_adjustment = ManualAdjustment(self.dataSteps[-1], self.matplotlib_canvas, self.manual_adjustment_params)
             data, *self.manual_adjustment_params = manual_adjustment.run()
             self.dataSteps.append(data)
-        else:
-            if getattr(self, 'batch_mode', False):
-                self.skip_manual_adjustment = True
-
-    if self.issvs:
+        elif getattr(self, 'batch_mode', False): self.skip_manual_adjustment = True
         filepath = os.path.join(self.outputpath, "Result.pdf")
         figure = matplotlib.figure.Figure(figsize=(12, 9))
         plot_mrs(self.dataSteps[-1], figure)
@@ -273,90 +261,67 @@ def saveDataPlot(self):
         figure.savefig(filepath, dpi=600, format='pdf')
         utils.log_debug("Saved result to " + filepath)
 
-
 def analyseResults(self):
     results = self.dataSteps[-1]
-    #if self.issvs == False:
     self.basis_file = None
-
-    # Determine nucleus and Larmor frequency
     nucleus = self.originalData[0].nucleus
     if nucleus is None or nucleus == 'unknown':
-        utils.log_error("Nucleus not found in data.")
-        return False
+        utils.log_error("Nucleus not found in data."); return False
     if nucleus not in utils.larmor_frequencies:
-        utils.log_error(f"Nucleus '{nucleus}' not supported. Supported nuclei: {list(utils.larmor_frequencies.keys())}")
-        return False
+        utils.log_error(f"Nucleus '{nucleus}' not supported. Supported nuclei: {list(utils.larmor_frequencies.keys())}"); return False
     larmor = utils.larmor_frequencies[nucleus]
+    utils.log_debug(f"Determined nucleus {nucleus} from string {self.originalData[0].nucleus}.")
 
-    # Conditionally set wresult based on the nucleus
+    wresult = None
     if nucleus == "1H":
-        if self.wrefSteps and len(self.wrefSteps) > 0 and self.wrefSteps[-1] and len(self.wrefSteps[-1]) > 0:
-            try:
-                if self.wrefSteps[-1][0] is not None:
-                    wresult = self.wrefSteps[-1][0].inherit(np.mean(np.array(self.wrefSteps[-1]), axis=0))
-                else:
-                    utils.log_warning("Last element of wrefSteps[-1][0] is None. Water reference will be ignored.")
-                    wresult = None
-            except Exception as e:
-                utils.log_warning(f"Error processing wrefSteps: {e}. Water reference will be ignored.")
-                wresult = None
-        else:
+        if len(self.wrefSteps) == 0: utils.log_warning("No water reference available for analysis.")
+        elif self.wrefSteps[-1] is None or len(self.wrefSteps[-1]) == 0:
             utils.log_warning("wrefSteps is empty or improperly formatted. Water reference will be ignored.")
-            wresult = None
-    else: wresult = None # For nuclei other than 1H, water reference is not applicable
-
-    # Basis file generation
-    tesla = round(results[0].f0 / larmor, 0)
-    basis_file_gen = None
-    if self.sequence is not None:
-        strte = str(results[0].te)
-        if strte.endswith(".0"): strte = strte[:-2]
-        if nucleus == "31P": basis_file_gen = f"{int(tesla)}T_{self.sequence}_31P_TE{strte}ms.BASIS"
-        else: basis_file_gen = f"{int(tesla)}T_{self.sequence}_TE{strte}ms.BASIS"
-        basis_file_gen = os.path.join(self.programpath, "lcmodel", "basis", basis_file_gen)
-    else: utils.log_warning("Sequence not found, basis file not generated")
+        else: wresult = self.wrefSteps[-1][0].inherit(np.mean(np.array(self.wrefSteps[-1]), axis=0))
 
     # Handle user-specified basis file
+    self.basis_file = None
     if self.basis_file_user is not None:
-        if not os.path.exists(self.basis_file_user):
-            utils.log_warning("Basis set not found:\n\t", self.basis_file_user)
-            self.basis_file = None
-        else: self.basis_file = self.basis_file_user
-
-    # If no user basis file, check generated basis file
-    if self.basis_file is None and basis_file_gen is not None and os.path.exists(basis_file_gen):
-        def basis_dialog():
-            dlg = wx.MessageDialog(
-                None, basis_file_gen, 
-                "Basis set found, is it the right one?\n" + basis_file_gen, 
-                wx.YES_NO | wx.CANCEL | wx.ICON_INFORMATION
-            )
-            button_clicked = dlg.ShowModal()
-            dlg.Destroy()
-            return button_clicked
-        button_clicked = run_blocking(basis_dialog)
-        if button_clicked == wx.ID_YES: self.basis_file = basis_file_gen
-        elif button_clicked == wx.ID_CANCEL: return False
+        if os.path.exists(self.basis_file_user): self.basis_file = self.basis_file_user
+        else: utils.log_warning(f"User-specififed basis set not found: {self.basis_file_user}.")
+    
+    # Basis file generation
+    if self.basis_file is None:
+        tesla = round(results[0].f0 / larmor, 0)
+        basis_file_gen = None
+        if self.sequence is not None:
+            strte = str(results[0].te)
+            if strte.endswith(".0"): strte = strte[:-2]
+            if nucleus == "31P": basis_file_gen = f"{int(tesla)}T_{self.sequence}_31P_TE{strte}ms.BASIS"
+            else: basis_file_gen = f"{int(tesla)}T_{self.sequence}_TE{strte}ms.BASIS"
+            basis_file_gen = os.path.join(self.programpath, "lcmodel", "basis", basis_file_gen)
+            utils.log_debug(f"Generated basis file name {basis_file_gen}.")
+        else: utils.log_warning("Sequence not found, basis file not generated.")
+        if basis_file_gen is not None and os.path.exists(basis_file_gen):
+            def basis_dialog():
+                dlg = wx.MessageDialog(None, basis_file_gen, "Basis set found, is it the right one?\n" + basis_file_gen, wx.YES_NO | wx.CANCEL | wx.ICON_INFORMATION)
+                button_clicked = dlg.ShowModal(); dlg.Destroy(); return button_clicked
+            button_clicked = run_blocking(basis_dialog)
+            if button_clicked == wx.ID_YES: self.basis_file = basis_file_gen
+            elif button_clicked == wx.ID_CANCEL: return False
     
     if self.basis_file is None:
-        utils.log_warning("Basis set not found:\n\t", basis_file_gen)
+        utils.log_warning(f"Generated basis set not found: {basis_file_gen}")
         run_blocking(self.fitting_frame.Show)
         wx.CallAfter(self.fitting_frame.SetFocus)
-        while self.fitting_frame.IsShown():
-            time.sleep(0.1)
+        while self.fitting_frame.IsShown(): time.sleep(0.1)
         self.basis_file = self.basis_file_user
 
     if self.basis_file is None:
-        utils.log_error("No basis file specified")
-        return False
+        utils.log_error("No basis file specified"); return False
+    utils.log_debug(f"Using basis set {self.basis_file}.")
 
     # Control file handling
     params = None
     if self.control_file_user is not None and os.path.exists(self.control_file_user):
         try: params = read_control(self.control_file_user)
         except Exception as e:
-            utils.log_warning(f"Error reading user control file: {e}. Attempting to use default control file.")
+            utils.log_warning(f"Error reading user control file, attempting to use default control file.\n{e}")
             params = None
     else:
         self.control_file_user = os.path.join(self.programpath, "lcmodel", ("" if nucleus == "1H" else nucleus + "_") + "default.CONTROL")
@@ -367,15 +332,15 @@ def analyseResults(self):
             utils.log_warning(f"Error reading default control file: {e}.")
             params = None
     if params is None:
-        utils.log_error("Control file not found or could not be read: ", self.control_file_user)
-        return False
+        utils.log_error("Control file not found or could not be read: ", self.control_file_user); return False
+    utils.log_debug(f"Using control file {self.control_file_user}.")
 
     # Handle labels
     global labels
     if labels is None or len(labels) == 0:
         if self.issvs == True: labels = [str(i) for i in range(len(results))]
         else: labels = [str(i) for i in range(len(results[0]))]
-    result_np = np.array(results[0])
+    utils.log_debug(f"Using labels {labels}.")
 
     # Segmentation and water concentration (only for 1H)
     wconc = None
@@ -393,30 +358,25 @@ def analyseResults(self):
             return False
 
         thickness = np.array([np.max(np.abs(np.array(results[0].transform)[:3, i])) for i in range(3)])
-        index1 = ants.transform_physical_point_to_index(wm_img, centre - thickness / 2).astype(int)
-        index2 = ants.transform_physical_point_to_index(wm_img, centre + thickness / 2).astype(int)
+        i1 = ants.transform_physical_point_to_index(wm_img, centre - thickness / 2).astype(int)
+        i2 = ants.transform_physical_point_to_index(wm_img, centre + thickness / 2).astype(int)
         for i in range(3):
-            if index1[i] > index2[i]:
-                index1[i], index2[i] = index2[i], index1[i]
-        wm_sum = np.sum(wm_img.numpy()[index1[0]:index2[0], index1[1]:index2[1], index1[2]:index2[2]])
-        gm_sum = np.sum(gm_img.numpy()[index1[0]:index2[0], index1[1]:index2[1], index1[2]:index2[2]])
-        csf_sum = np.sum(csf_img.numpy()[index1[0]:index2[0], index1[1]:index2[1], index1[2]:index2[2]])
-        _sum = wm_sum + gm_sum + csf_sum
-        if _sum == 0:
+            if i1[i] > i2[i]: i1[i], i2[i] = i2[i], i1[i]
+        wm_sum, gm_sum, csf_sum = tuple([np.sum(img.numpy()[i1[0]:i2[0], i1[1]:i2[1], i1[2]:i2[2]]) for img in [wm_img, gm_img, csf_img]])
+        seg_sum = wm_sum + gm_sum + csf_sum
+        if seg_sum == 0:
             utils.log_warning("Segmentation sums to zero. Skipping water concentration calculation.")
             wconc = None
         else:
-            f_wm = wm_sum / _sum
-            f_gm = gm_sum / _sum
-            f_csf = csf_sum / _sum
+            f_wm = wm_sum / seg_sum
+            f_gm = gm_sum / seg_sum
+            f_csf = csf_sum / seg_sum
             wconc = (43300 * f_gm + 35880 * f_wm + 55556 * f_csf) / (1 - f_csf)
-            utils.log_info(
-                "Calculated the following values from the segmentation files:\n",
-                "\tWM: ", f_wm, " GM: ", f_gm, " CSF: ", f_csf, " → Water concentration: ", wconc
-            )
+            utils.log_info("Calculated WM = ", f_wm, ", GM = ", f_gm, ", CSF = ", f_csf, " → Water conc. = ", wconc, ".")
     else:
-        if nucleus != "1H": utils.log_info("Segmentation and water concentration calculation skipped for nucleus: ", nucleus)
-        else: utils.log_warning("Segmentation files not provided. Water concentration will be ignored.")
+        if nucleus != "1H": utils.log_info("Segmentation and water concentration calculation skipped for nucleus ", nucleus, ".")
+        else: utils.log_warning("Segmentation files not provided, water concentration will be ignored.")
+    print("seg files")
 
     # Create work folder and copy LCModel executable
     lcmodelfile = os.path.join(self.programpath, "lcmodel", "lcmodel")  # Linux exe
