@@ -1,4 +1,5 @@
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14866163.svg)](https://zenodo.org/records/14866163)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15729683.svg)](https://doi.org/10.5281/zenodo.15729683)
+
 
 # Simple download and double-click application for windows users to process MRS(I) data.
 
