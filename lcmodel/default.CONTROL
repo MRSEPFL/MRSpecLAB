@@ -1,11 +1,6 @@
  $LCMODL
-<<<<<<< HEAD
  OWNER = 'Center for Biomedical Imaging, Lausanne'
  KEY = 210387309
-=======
- OWNER = ''
- KEY = 123456789
->>>>>>> dfaee40a8dbd9a7675ff712b6626c00424e81f60
  DELTAT = 0.00025
  HZPPPM = 297.204194
  NUNFIL = 2048

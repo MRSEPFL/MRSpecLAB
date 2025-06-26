@@ -1,23 +1,27 @@
-import wx
+import wx, os, sys, shutil, zipfile, time, subprocess
 import numpy as np
-import os, sys, shutil, zipfile, time, subprocess
 import matplotlib
-import ants
+# import ants
 import datetime
 import traceback
-import subprocess
-
-import re
+import threading
 
 from interface import utils
 from inout.read_mrs import load_file
 from inout.read_coord import ReadlcmCoord
 from inout.read_header import Table
-from inout.io_lcmodel import save_raw, read_control, save_control, save_nifti, save_nifti_spec2nii
+from inout.io_lcmodel import save_raw, read_control, save_control, save_nifti
 from interface.plot_helpers import plot_mrs, plot_coord, read_file
 
-#SVS
-
+def run_blocking(func, *args, **kwargs):
+    event = threading.Event()
+    result_container = {}
+    def wrapper():
+        result_container['result'] = func(*args, **kwargs)
+        event.set()
+    wx.CallAfter(wrapper)
+    event.wait()
+    return result_container['result']
 
 def loadInput(self):
     self.save_lastfiles()
@@ -39,8 +43,7 @@ def loadInput(self):
         except: utils.log_warning("Error loading file: " + filepath + "\n\t" + str(sys.exc_info()[0]))
         else:
             if data is None:
-                utils.log_warning("Couldn't load file: " + filepath)
-                continue
+                utils.log_warning("Couldn't load file: " + filepath); continue
             if isinstance(data, list):
                 self.originalData += data
             elif len(data.shape) > 1:
@@ -50,41 +53,33 @@ def loadInput(self):
             else:
                 # check multi-voxel for rda data
                 if dtype == "rda":
-                    if header["CSIMatrix_Size[0]"] == 1 and header["CSIMatrix_Size[1]"] == 1 and header["CSIMatrix_Size[2]"] == 1:
-                        self.issvs = True
-                        utils.log_info("SVS data")
-                    else:
-                        self.issvs = False
-                        utils.log_info("CSI data")
-
+                    self.issvs = header["CSIMatrix_Size[0]"] == 1 and header["CSIMatrix_Size[1]"] == 1 and header["CSIMatrix_Size[2]"] == 1
+                    if self.issvs: utils.log_debug(f"SVS data detected for {filepath}")
+                    else: utils.log_debug(f"CSI data detected for {filepath}")
                 if self.header is None: self.header = header
             utils.log_debug("Loaded file: " + filepath)
     
     if len(self.originalData) == 0:
-        utils.log_error("No files loaded")
-        return False
+        utils.log_error("No files loaded"); return False
     if self.header is None:
-        utils.log_error("No header found")
-        return False
+        utils.log_error("No header found"); return False
     
-    nucleus = None
-    for key in ["Nucleus", "nucleus"]:
-        if key in self.header:
-            nucleus = self.header[key]
-            break
+    nucleus = self.originalData[0].nucleus
+    if nucleus in (None, 'unknown'):
+        utils.log_error("Nucleus not found in data.")
+        return False
 
     if nucleus == "31P" and self.issvs:
         has_phase_alignment = any("PhaseAlignment31P" in step.__class__.__name__ for step in self.steps) or any("TEBasedPhaseCorrecton31P" in step.__class__.__name__ for step in self.steps)
         if not has_phase_alignment:
-            dlg = wx.MessageDialog(
-                self,
-                "31P data detected, but the current pipeline does not include the 'PhaseAlignment31P' step.\n"
-                "Would you like to load the standard 31P pipeline?",
-                "Pipeline Mismatch",
-                wx.YES_NO | wx.ICON_QUESTION
-            )
-            response = dlg.ShowModal()
-            dlg.Destroy()
+            def dialog_func():
+                dlg = wx.MessageDialog(self,
+                    "31P data detected, but the current pipeline does not include the 'PhaseAlignment31P' step.\n"
+                    "Would you like to load the standard 31P pipeline?",
+                    "Pipeline Mismatch", wx.YES_NO | wx.ICON_QUESTION
+                )
+                response = dlg.ShowModal(); dlg.Destroy(); return response
+            response = run_blocking(dialog_func)
             if response == wx.ID_YES:
                 standard_pipeline_path = os.path.join(os.getcwd(), "31P_standard_pipeline.pipe")
                 self.pipeline_frame.on_load_pipeline(event=None, filepath=standard_pipeline_path)
@@ -126,18 +121,14 @@ def loadInput(self):
     seqstr = None
     for key in ["SequenceString", "Sequence"]:
         if key in self.header.keys():
-            seqstr = self.header[key]
-            break
+            seqstr = self.header[key]; break
     self.sequence = None
-
-
     if seqstr is None: utils.log_warning("Sequence not found in header")
     else:
         for k, v in utils.supported_sequences.items():
             for seq in v:
                 if seq in seqstr:
-                    self.sequence = k
-                    break
+                    self.sequence = k; break
         if self.sequence is not None:
             utils.log_info("Sequence detected: ", seqstr + " → " + self.sequence)
 
@@ -145,8 +136,6 @@ def loadInput(self):
     allfiles = [os.path.basename(f) for f in self.filepaths]
     if self.originalWref is not None:
         allfiles.append(os.path.basename(self.Waterfiles.filepaths[0]))
-    # prefix = os.path.commonprefix(allfiles).strip("."+dtype).replace(" ", "").replace("^", "")
-    # if prefix == "": prefix = "output"
     if hasattr(self, 'batch_mode') and self.batch_mode and hasattr(self, 'participant_name') and self.participant_name:
         prefix = self.participant_name
         base = os.path.join(self.batch_study_folder, prefix)
@@ -170,29 +159,33 @@ def loadInput(self):
         table.MRSinMRS_Table[csvcols].to_csv(os.path.join(self.outputpath, "MRSinMRS_table.csv"))
     return True
 
-dataDict = {}
+# dataDict = {}
+labels = []
 
 def processStep(self, step, nstep):
-    global dataDict
-    dataDict["input"] = self.dataSteps[-1]
-    dataDict["wref"] = self.wrefSteps[-1]
-    dataDict["output"] = []
-    dataDict["wref_output"] = []
-    
-    dataDict["header"] = self.headerSteps[-1] # added for transmit header
+    with self.data_lock:
+        dataDict = {}
+        dataDict["input"] = self.dataSteps[-1]
+        dataDict["wref"] = self.wrefSteps[-1]
+        dataDict["output"] = []
+        dataDict["wref_output"] = []
+        dataDict["header"] = self.headerSteps[-1] # added for transmit header
 
-    self.button_step_processing.Disable()
+    wx.CallAfter(self.button_step_processing.Disable)
     if not self.fast_processing:
-        self.button_auto_processing.Disable()
+        wx.CallAfter(self.button_auto_processing.Disable)
 
     utils.log_debug("Running ", step.__class__.__name__)
     start_time = time.time()
     step.process(dataDict)
     utils.log_info("Time to process " + step.__class__.__name__ + ": {:.3f}".format(time.time() - start_time))
-    self.dataSteps.append(dataDict["output"])
-    if len(dataDict["wref_output"]) != 0:
-        self.wrefSteps.append(dataDict["wref_output"])
-    else: self.wrefSteps.append(dataDict["wref"])
+    with self.data_lock:
+        self.dataSteps.append(dataDict["output"])
+        if len(dataDict["wref_output"]) != 0:
+            self.wrefSteps.append(dataDict["wref_output"])
+        else: self.wrefSteps.append(dataDict["wref"])
+        if "labels" in dataDict.keys() and dataDict["labels"] is not None:
+            global labels; labels = dataDict["labels"]
 
     utils.log_debug("Plotting ", step.__class__.__name__)
     start_time = time.time()
@@ -220,47 +213,22 @@ def processStep(self, step, nstep):
         if not os.path.exists(steppath): os.mkdir(steppath)
         filepath = os.path.join(steppath, "data")
         if not os.path.exists(filepath): os.mkdir(filepath)
-        #for i, d in enumerate(dataDict["output"]): 
-        #    if d is not None:
-        #        save_raw(os.path.join(filepath, str(i) + ".RAW"), d, seq=self.sequence)
-        #for i, d in enumerate(dataDict["wref_output"]): save_raw(os.path.join(filepath, "wref_" + str(i) + ".RAW"), d, seq=self.sequence)
-        #for i, d in enumerate(dataDict["output"]): 
-        #    if d is not None:
-        #        save_nifti(os.path.join(filepath, str(i) + ".nii"), d, seq=self.sequence)
-        #for i, d in enumerate(dataDict["wref_output"]): save_nifti(os.path.join(filepath, "wref_" + str(i) + ".nii"), d, seq=self.sequence)
-        nucleus = None
-        for key in ["Nucleus", "nucleus"]:
-            if key in self.header:
-                nucleus = self.header[key]
-                break
-        for i, d in enumerate(dataDict["output"]):
-            if d is not None:
-                # Save the .RAW file as before.
-                raw_filepath = os.path.join(filepath, f"{i}.RAW")
-                save_raw(raw_filepath, d, seq=self.sequence)
-                
-                # Now use spec2nii to convert the .RAW file to NIfTI.
-                nifti_filepath = save_nifti_spec2nii(raw_filepath, d, nucleus=nucleus, seq=self.sequence)
-                if nifti_filepath is not None:
-                    utils.log_debug(f"NIfTI file generated: {nifti_filepath}")
-                else:
-                    utils.log_error(f"Failed to generate NIfTI file for {raw_filepath}")
-                
-        for i, d in enumerate(dataDict["wref_output"]):
-            raw_filepath = os.path.join(filepath, f"wref_{i}.RAW")
-            save_raw(raw_filepath, d, seq=self.sequence)
-            nifti_filepath = save_nifti_spec2nii(raw_filepath, d, nucleus=nucleus, seq=self.sequence)
-            if nifti_filepath is not None:
-                utils.log_debug(f"WATER NIfTI file generated: {nifti_filepath}")
-            else:
-                utils.log_error(f"Failed to generate WATER NIfTI file for {raw_filepath}")
-
+        with self.data_lock:
+            for i, d in enumerate(dataDict["output"]):
+                if d is not None: save_raw(os.path.join(filepath, "metab_" + str(i+1) + ".RAW"), d, seq=self.sequence)
+                else: utils.log_warning(f"Data for index {i} is None, skipping save.")
+            for i, d in enumerate(dataDict["wref_output"]):
+                if d is not None: save_raw(os.path.join(filepath, "water_" + str(i+1) + ".RAW"), d, seq=self.sequence)
+                else: utils.log_warning(f"Water reference data for index {i} is None, skipping save.")
+            save_nifti(os.path.join(filepath, "metab.nii"), dataDict['output'], seq=self.sequence)
+            if dataDict["wref_output"] is not None and len(dataDict["wref_output"]) > 0:
+                save_nifti(os.path.join(filepath, "water.nii"), dataDict["wref_output"], seq=self.sequence)
 
     # canvas plot
     if not self.fast_processing:
-        self.matplotlib_canvas.clear()
-        step.plot(self.matplotlib_canvas.figure, dataDict)
-        self.matplotlib_canvas.draw()
+        wx.CallAfter(self.matplotlib_canvas.clear)
+        wx.CallAfter(step.plot, self.matplotlib_canvas.figure, dataDict)
+        wx.CallAfter(self.matplotlib_canvas.draw)
     utils.log_info("Time to plot " + step.__class__.__name__ + ": {:.3f}".format(time.time() - start_time))
     
 def saveDataPlot(self):
@@ -274,25 +242,18 @@ def saveDataPlot(self):
             utils.log_debug("Saved result to " + filepath)
         return
 
-    # 2. Show the same two-button dialog in all modes
     if self.issvs:
-        dlg = wx.MessageDialog(None,
-                            "Do you want to manually adjust frequency and phase shifts of the result?",
-                            "",
-                            wx.YES_NO | wx.ICON_INFORMATION)
-        button_clicked = dlg.ShowModal()
-        dlg.Destroy()
-
+        def man_adj_dialog():
+            dlg = wx.MessageDialog(None, "Do you want to manually adjust frequency and phase shifts of the result?", "", wx.YES_NO | wx.ICON_INFORMATION)
+            button_clicked = dlg.ShowModal(); dlg.Destroy(); return button_clicked
+        button_clicked = run_blocking(man_adj_dialog)
         if button_clicked == wx.ID_YES:
-            self.matplotlib_canvas.clear()
+            wx.CallAfter(self.matplotlib_canvas.clear)
             from processing.manual_adjustment import ManualAdjustment
-            manual_adjustment = ManualAdjustment(self.dataSteps[-1], self.matplotlib_canvas)
-            self.dataSteps.append(manual_adjustment.run())
-        else:
-            if getattr(self, 'batch_mode', False):
-                self.skip_manual_adjustment = True
-
-    if self.issvs:
+            manual_adjustment = ManualAdjustment(self.dataSteps[-1], self.matplotlib_canvas, self.manual_adjustment_params)
+            data, *self.manual_adjustment_params = manual_adjustment.run()
+            self.dataSteps.append(data)
+        elif getattr(self, 'batch_mode', False): self.skip_manual_adjustment = True
         filepath = os.path.join(self.outputpath, "Result.pdf")
         figure = matplotlib.figure.Figure(figsize=(12, 9))
         plot_mrs(self.dataSteps[-1], figure)
@@ -300,197 +261,138 @@ def saveDataPlot(self):
         figure.savefig(filepath, dpi=600, format='pdf')
         utils.log_debug("Saved result to " + filepath)
 
-
 def analyseResults(self):
     results = self.dataSteps[-1]
-    #if self.issvs == False:
-        
-
-        
     self.basis_file = None
+    nucleus = self.originalData[0].nucleus
+    if nucleus is None or nucleus == 'unknown':
+        utils.log_error("Nucleus not found in data."); return False
+    if nucleus not in utils.larmor_frequencies:
+        utils.log_error(f"Nucleus '{nucleus}' not supported. Supported nuclei: {list(utils.larmor_frequencies.keys())}"); return False
+    larmor = utils.larmor_frequencies[nucleus]
+    utils.log_debug(f"Determined nucleus {nucleus} from string {self.originalData[0].nucleus}.")
 
-    # Determine nucleus and Larmor frequency
-    nucleus = None
-    larmor = 0
-    for key in ["Nucleus", "nucleus"]:
-        if key in self.header.keys():
-            nucleus = self.header[key]
-            if self.header[key] == "1H": larmor = 42.577
-            elif self.header[key] == "31P": larmor = 17.235
-            elif self.header[key] == "23Na": larmor = 11.262
-            elif self.header[key] == "2H": larmor = 6.536
-            elif self.header[key] == "13C": larmor = 10.7084
-            elif self.header[key] == "19F": larmor = 40.078
-            break
-
-    if nucleus is None:
-        utils.log_error("Nucleus information not found in header.")
-        return False
-
-    # Conditionally set wresult based on the nucleus
+    wresult = None
     if nucleus == "1H":
-        if self.wrefSteps and len(self.wrefSteps) > 0 and self.wrefSteps[-1] and len(self.wrefSteps[-1]) > 0:
-            try:
-                if self.wrefSteps[-1][0] is not None:
-                    wresult = self.wrefSteps[-1][0].inherit(np.mean(np.array(self.wrefSteps[-1]), axis=0))
-                else:
-                    utils.log_warning("Last element of wrefSteps[-1][0] is None. Water reference will be ignored.")
-                    wresult = None
-            except Exception as e:
-                utils.log_warning(f"Error processing wrefSteps: {e}. Water reference will be ignored.")
-                wresult = None
-        else:
+        if len(self.wrefSteps) == 0: utils.log_warning("No water reference available for analysis.")
+        elif self.wrefSteps[-1] is None or len(self.wrefSteps[-1]) == 0:
             utils.log_warning("wrefSteps is empty or improperly formatted. Water reference will be ignored.")
-            wresult = None
-    else:
-        # For nuclei other than 1H, water reference is not applicable
-        wresult = None
-
-    # Basis file generation
-    tesla = round(results[0].f0 / larmor, 0)
-    basis_file_gen = None
-    if self.sequence is not None:
-        strte = str(results[0].te)
-        if strte.endswith(".0"):
-            strte = strte[:-2]
-        if nucleus == "31P":
-            basis_file_gen = f"{int(tesla)}T_{self.sequence}_31P_TE{strte}ms.BASIS" #basis_file_gen = f"{int(tesla)}T_{self.sequence}_31P_TE{strte}ms.BASIS"
-        else:
-            basis_file_gen = f"{int(tesla)}T_{self.sequence}_TE{strte}ms.BASIS"
-        basis_file_gen = os.path.join(self.programpath, "lcmodel", "basis", basis_file_gen)
-    else:
-        utils.log_warning("Sequence not found, basis file not generated")
+        else: wresult = self.wrefSteps[-1][0].inherit(np.mean(np.array(self.wrefSteps[-1]), axis=0))
 
     # Handle user-specified basis file
+    self.basis_file = None
     if self.basis_file_user is not None:
-        if not os.path.exists(self.basis_file_user):
-            utils.log_warning("Basis set not found:\n\t", self.basis_file_user)
-            self.basis_file = None
-        else:
-            self.basis_file = self.basis_file_user
-
-    # If no user basis file, check generated basis file
-    if self.basis_file is None and basis_file_gen is not None and os.path.exists(basis_file_gen):
-        dlg = wx.MessageDialog(
-            None, 
-            basis_file_gen, 
-            "Basis set found, is it the right one?\n" + basis_file_gen, 
-            wx.YES_NO | wx.CANCEL | wx.ICON_INFORMATION
-        )
-        button_clicked = dlg.ShowModal()
-        dlg.Destroy()  # Always destroy dialogs after use
-        if button_clicked == wx.ID_YES:
-            self.basis_file = basis_file_gen
-        elif button_clicked == wx.ID_CANCEL:
-            return False
-
-    # If still no basis file
+        if os.path.exists(self.basis_file_user): self.basis_file = self.basis_file_user
+        else: utils.log_warning(f"User-specififed basis set not found: {self.basis_file_user}.")
+    
+    # Basis file generation
     if self.basis_file is None:
-        utils.log_warning("Basis set not found:\n\t", basis_file_gen)
-        self.fitting_frame.Show()
-        self.fitting_frame.SetFocus()
-        while self.fitting_frame.IsShown():
-            time.sleep(0.1)
+        tesla = round(results[0].f0 / larmor, 0)
+        basis_file_gen = None
+        if self.sequence is not None:
+            strte = str(results[0].te)
+            if strte.endswith(".0"): strte = strte[:-2]
+            if nucleus == "31P": basis_file_gen = f"{int(tesla)}T_{self.sequence}_31P_TE{strte}ms.BASIS"
+            else: basis_file_gen = f"{int(tesla)}T_{self.sequence}_TE{strte}ms.BASIS"
+            basis_file_gen = os.path.join(self.programpath, "lcmodel", "basis", basis_file_gen)
+            utils.log_debug(f"Generated basis file name {basis_file_gen}.")
+        else: utils.log_warning("Sequence not found, basis file not generated.")
+        if basis_file_gen is not None and os.path.exists(basis_file_gen):
+            def basis_dialog():
+                dlg = wx.MessageDialog(None, basis_file_gen, "Basis set found, is it the right one?\n" + basis_file_gen, wx.YES_NO | wx.CANCEL | wx.ICON_INFORMATION)
+                button_clicked = dlg.ShowModal(); dlg.Destroy(); return button_clicked
+            button_clicked = run_blocking(basis_dialog)
+            if button_clicked == wx.ID_YES: self.basis_file = basis_file_gen
+            elif button_clicked == wx.ID_CANCEL: return False
+    
+    if self.basis_file is None:
+        utils.log_warning(f"Generated basis set not found: {basis_file_gen}")
+        run_blocking(self.fitting_frame.Show)
+        wx.CallAfter(self.fitting_frame.SetFocus)
+        while self.fitting_frame.IsShown(): time.sleep(0.1)
         self.basis_file = self.basis_file_user
 
     if self.basis_file is None:
-        utils.log_error("No basis file specified")
-        return False
+        utils.log_error("No basis file specified"); return False
+    utils.log_debug(f"Using basis set {self.basis_file}.")
 
     # Control file handling
     params = None
     if self.control_file_user is not None and os.path.exists(self.control_file_user):
-        try:
-            params = read_control(self.control_file_user)
+        try: params = read_control(self.control_file_user)
         except Exception as e:
-            utils.log_warning(f"Error reading user control file: {e}. Attempting to use default control file.")
+            utils.log_warning(f"Error reading user control file, attempting to use default control file.\n{e}")
             params = None
     else:
-        if nucleus == "1H":
-            self.control_file_user = os.path.join(self.programpath, "lcmodel", "default.CONTROL")
-        if nucleus == "31P":
-            self.control_file_user = os.path.join(self.programpath, "lcmodel", "31P_default.CONTROL")
+        self.control_file_user = os.path.join(self.programpath, "lcmodel", ("" if nucleus == "1H" else nucleus + "_") + "default.CONTROL")
         try:
             params = read_control(self.control_file_user)
-            if nucleus == "1H":
-                params.update({"DOECC": wresult is not None and "EddyCurrentCorrection" not in self.pipeline})
-            else:
-                params.update({"DOECC": False})
+            params.update({"DOECC": nucleus == "1H" and wresult is not None and "EddyCurrentCorrection" not in self.pipeline})
         except Exception as e:
             utils.log_warning(f"Error reading default control file: {e}.")
             params = None
     if params is None:
-        utils.log_error("Control file not found or could not be read:\n\t", self.control_file_user)
-        return False
+        utils.log_error("Control file not found or could not be read: ", self.control_file_user); return False
+    utils.log_debug(f"Using control file {self.control_file_user}.")
 
     # Handle labels
+    global labels
+    if labels is None or len(labels) == 0:
+        if self.issvs == True: labels = [str(i) for i in range(len(results))]
+        else: labels = [str(i) for i in range(len(results[0]))]
+    utils.log_debug(f"Using labels {labels}.")
 
-    if "labels" in dataDict.keys():
-        labels = dataDict["labels"]
-    else:
-        if self.issvs == True:
-            labels = [str(i) for i in range(len(results))]
-        else:
-            labels = [str(i) for i in range(len(results[0]))]
-
-    result_np = np.array(results[0])
-    utils.log_info(f"length of results {len(results[0])}")
-    utils.log_info(f"shape of results {result_np.shape}")
+    # Setup workpath
+    workpath = os.path.join(os.path.dirname(self.outputpath_base), "temp")
+    if os.path.exists(workpath): shutil.rmtree(workpath)
+    os.mkdir(workpath)
+    utils.log_debug(f"LCModel/ANTs work folder: {workpath}")
 
     # Segmentation and water concentration (only for 1H)
     wconc = None
-    if nucleus == "1H" and self.wm_file_user and self.gm_file_user and self.csf_file_user:
-        try:
-            centre = results[0].centre
-        except Exception as e:
-            utils.log_error(f"Could not retrieve voxel location from data: {e}")
-            return False
-        try:
-            wm_img = ants.image_read(self.wm_file_user)
-            gm_img = ants.image_read(self.gm_file_user)
-            csf_img = ants.image_read(self.csf_file_user)
-        except Exception as e:
-            utils.log_error(f"Could not load segmentation files:\n\t{e}")
-            return False
-
-        thickness = np.array([np.max(np.abs(np.array(results[0].transform)[:3, i])) for i in range(3)])
-        index1 = ants.transform_physical_point_to_index(wm_img, centre - thickness / 2).astype(int)
-        index2 = ants.transform_physical_point_to_index(wm_img, centre + thickness / 2).astype(int)
-        for i in range(3):
-            if index1[i] > index2[i]:
-                index1[i], index2[i] = index2[i], index1[i]
-        wm_sum = np.sum(wm_img.numpy()[index1[0]:index2[0], index1[1]:index2[1], index1[2]:index2[2]])
-        gm_sum = np.sum(gm_img.numpy()[index1[0]:index2[0], index1[1]:index2[1], index1[2]:index2[2]])
-        csf_sum = np.sum(csf_img.numpy()[index1[0]:index2[0], index1[1]:index2[1], index1[2]:index2[2]])
-        _sum = wm_sum + gm_sum + csf_sum
-        if _sum == 0:
+    seg_files = [self.wm_file_user, self.gm_file_user, self.csf_file_user]
+    if all(seg_files):
+        if not all(os.path.exists(f) for f in seg_files):
+            utils.log_error(f"Could not find segmentation files."); return False
+        if not hasattr(results[0], "centre"):
+            utils.log_error(f"Could not retrieve voxel location from input data."); return False
+        centre = results[0].centre
+        # ANTs and WX use conflicting C++ backends and crash when run in the same process..
+        import pickle
+        pkl_arg_path = os.path.join(workpath, "tmp.pkl")
+        pkl_result_path = os.path.join(workpath, "tmp2.pkl")
+        with open(pkl_arg_path, "wb") as f:
+            pickle.dump([seg_files, centre, results[0].transform, pkl_result_path], f)
+        if hasattr(sys, '_MEIPASS'): # running from pyinstaller executable
+            helper_exe = os.path.join(sys._MEIPASS, "read_ants_image" + (".exe" if utils.iswindows() else ""))
+            utils.log_debug(f"Calling ANTs subprocess with {helper_exe}.")
+            result = subprocess.run([helper_exe, pkl_arg_path], capture_output=True, text=True)
+        else: # running from source code
+            utils.log_debug(f"Calling ANTs subprocess with {sys.executable}.")
+            script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "./inout/read_ants_image.py")
+            result = subprocess.run([sys.executable, script_path, pkl_arg_path], capture_output=True, text=True)
+        if result.returncode != 0:
+            utils.log_error(f"Analysing the segmentation images failed:\n{result.stdout}\n{result.stderr}"); return False
+        with open(pkl_result_path, "rb") as f:
+            wm_gm_csf_sums = pickle.load(f)
+        wm_sum, gm_sum, csf_sum = tuple(wm_gm_csf_sums)
+        seg_sum = wm_sum + gm_sum + csf_sum
+        if seg_sum == 0:
             utils.log_warning("Segmentation sums to zero. Skipping water concentration calculation.")
             wconc = None
         else:
-            f_wm = wm_sum / _sum
-            f_gm = gm_sum / _sum
-            f_csf = csf_sum / _sum
+            f_wm = wm_sum / seg_sum
+            f_gm = gm_sum / seg_sum
+            f_csf = csf_sum / seg_sum
             wconc = (43300 * f_gm + 35880 * f_wm + 55556 * f_csf) / (1 - f_csf)
-            utils.log_info(
-                "Calculated the following values from the segmentation files:\n\tWM: ", 
-                f_wm, 
-                " GM: ", 
-                f_gm, 
-                " CSF: ", 
-                f_csf, 
-                " → Water concentration: ", 
-                wconc
-            )
+            utils.log_info("Calculated WM = ", f_wm, ", GM = ", f_gm, ", CSF = ", f_csf, " → Water conc. = ", wconc, ".")
     else:
-        if nucleus != "1H":
-            utils.log_info("Segmentation and water concentration calculation skipped for nucleus: ", nucleus)
-        else:
-            utils.log_warning("Segmentation files not provided. Water concentration will be ignored.")
+        if nucleus != "1H": utils.log_info("Segmentation and water concentration calculation skipped for nucleus ", nucleus, ".")
+        utils.log_warning("Segmentation files not provided, water concentration will be ignored.")
 
     # Create work folder and copy LCModel executable
     lcmodelfile = os.path.join(self.programpath, "lcmodel", "lcmodel")  # Linux exe
-    if os.name == 'nt':
-        lcmodelfile += ".exe"  # Windows exe
+    if utils.iswindows(): lcmodelfile += ".exe"  # Windows exe
 
     utils.log_debug("Looking for executable here: ", lcmodelfile)
     if not os.path.exists(lcmodelfile):
@@ -508,179 +410,119 @@ def analyseResults(self):
             utils.log_error(f"Failed to extract lcmodel from zip: {e}")
             return False
 
-    # Setup workpath
-    workpath = os.path.join(os.path.dirname(self.outputpath_base), "temp")
-    if os.path.exists(workpath):
-        shutil.rmtree(workpath)
-    os.mkdir(workpath)
-    utils.log_debug("LCModel work folder: ", workpath)
+    # Ensure executable permissions on Linux
+    if utils.islinux(): os.chmod(lcmodelfile, 0b111000000)
 
     # Copy LCModel executable to workpath
-    if os.name == 'nt':
-        command = f"""copy "{lcmodelfile}" "{workpath}" """
-    else:
-        command = f"""cp "{lcmodelfile}" "{workpath}" """
-    result_copy = subprocess.run(command, shell=True, capture_output=True, text=True)
-    utils.log_debug(f"Copy command output:\n{result_copy.stdout}")
+    if utils.iswindows(): command = f"""copy "{lcmodelfile}" "{workpath}" """
+    else: command = f"""cp "{lcmodelfile}" "{workpath}" """
+    result_copy = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
+    utils.log_debug(f"Copy command output: {result_copy.stdout}")
     if result_copy.stderr:
-        utils.log_warning(f"Copy command errors:\n{result_copy.stderr}")
+        utils.log_warning(f"Copy command errors: {result_copy.stderr}")
 
     # Setup LCModel save path
     lcmodelsavepath = os.path.join(self.outputpath, "lcmodel")
     if os.path.exists(lcmodelsavepath):
         shutil.rmtree(lcmodelsavepath)
     os.mkdir(lcmodelsavepath)
-    utils.log_debug("LCModel output folder: ", lcmodelsavepath)
+    utils.log_debug(f"LCModel output folder: {lcmodelsavepath}")
     
-    # Iterate over each result and label
-    if self.issvs == True:
-        temp_results = results
-    else:
-        temp_results = results[0]
+    if self.issvs == True: temp_results = results
+    else: temp_results = results[0]
 
-    
 
     def processVoxel(result, label):
-        """
-        All the existing logic needed to handle one voxel (or one spectrum).
-        This is essentially the body of your old 'for' loop.
-        """
-
+        """Process a single voxel for LCModel fitting."""
         label = "lcm" if label == "0" else label
+        rparams = {
+            "KEY": 123456789,
+            "FILRAW": f"./{label}.RAW",
+            "FILBAS": self.basis_file,
+            "FILPRI": f"./{label}.print",
+            "FILTAB": f"./{label}.table",
+            "FILPS": f"./{label}.ps",
+            "FILCOO": f"./{label}.coord",
+            "FILCOR": f"./{label}.coraw",
+            "FILCSV": f"./{label}.csv",
+            "NUNFIL": result.np,
+            "DELTAT": result.dt,
+            "ECHOT": result.te,
+            "HZPPPM": result.f0,
+            "LCOORD": 9,
+            "LCSV": 11,
+            "LTABLE": 7
+        }
 
-        result_label_np = np.array(result)
-        utils.log_info(f"shape of result {label}: {result_label_np.shape}")
-
-        # Initialize rparams with uppercase keys only
-        # (Same as in your code; just extracted here)
-        rparams = {}
-        for key in ["Nucleus", "nucleus"]:
-            if key in self.header.keys():
-                rparams = {
-                    "KEY": 123456789,
-                    "FILRAW": f"./{label}.raw",
-                    "FILBAS": self.basis_file,
-                    "FILPRI": f"./{label}.print",
-                    "FILTAB": f"./{label}.table",
-                    "FILPS": f"./{label}.ps",
-                    "FILCOO": f"./{label}.coord",
-                    "FILCOR": f"./{label}.coraw",
-                    "FILCSV": f"./{label}.csv",
-                    "NUNFIL": result.np,
-                    "DELTAT": result.dt,
-                    "ECHOT": result.te,
-                    "HZPPPM": result.f0,
-                    "LCOORD": 9,
-                    "LCSV": 11,
-                    "LTABLE": 7
-                }
-
-                # Conditional parameters based on nucleus
-                if wresult is not None:
-                    rparams.update({
-                        "FILH2O": f"./{label}.h2o",
-                        "DOWS": "EddyCurrentCorrection" not in self.pipeline  # Use water ref correction if appropriate.
-                    })
-                    if wconc is not None:
-                        rparams.update({"WCONC": wconc})
-                else:  # 31P or other
-                    rparams.update({"DOWS": False})
-                    rparams.pop("FILH2O", None)
-                    rparams.pop("WCONC", None)
-
-                # Merge any extra parameters
-                if params:
-                    params_upper = {k.upper(): v for k, v in params.items()}
-                    excluded_keys = [
-                        "FILRAW", "FILBAS", "FILPRI", "FILTAB",
-                        "FILPS", "FILCOO", "FILCOR", "FILCSV", "FILH2O",
-                        "NUNFIL", "DELTAT", "ECHOT", "HZPPM"
-                    ]
-                    params_filtered = {
-                        k: v for k, v in params_upper.items()
-                        if k not in excluded_keys
-                    }
-                    rparams.update(params_filtered)
+        if params:
+            params_upper = {k.upper(): v for k, v in params.items()}
+            excluded_keys = [
+                "FILRAW", "FILBAS", "FILPRI", "FILTAB",
+                "FILPS", "FILCOO", "FILCOR", "FILCSV", "FILH2O",
+                "NUNFIL", "DELTAT", "ECHOT", "HZPPPM"
+            ]
+            params_filtered = {
+                k: v for k, v in params_upper.items()
+                if k not in excluded_keys
+            }
+            rparams.update(params_filtered)
+        if self.originalWref is not None and nucleus == "1H" and wresult is not None:
+            rparams.update({
+                "FILH2O": f"./{label}.H2O",
+                "DOWS": "EddyCurrentCorrection" not in self.pipeline
+            })
+            if wconc is not None:
+                rparams.update({"WCONC": wconc})
+        else:
+            rparams.update({"DOWS": False})
+            rparams.update({"DOECC": False})
+            rparams.pop("FILH2O", None)
+            rparams.pop("WCONC", None)
 
         # Write CONTROL and RAW files
         try:
-            save_control(os.path.join(workpath, f"{label}.CONTROL"), rparams)
-            raw_filepath = os.path.join(workpath, f"{label}.RAW")
-            save_raw(raw_filepath, result, seq=self.sequence)
-            nifti_filepath = save_nifti_spec2nii(raw_filepath, result, nucleus=nucleus, seq=self.sequence)
-            if nifti_filepath is not None:
-                utils.log_debug(f"NIfTI file generated for {label}: {nifti_filepath}")
-            else:
-                utils.log_error(f"Failed to generate NIfTI file for {raw_filepath}")
+            base_path = os.path.join(workpath, label)
+            save_control(base_path + ".CONTROL", rparams)
+            save_raw(base_path + ".RAW", result, seq=self.sequence)
+            save_nifti(base_path + ".nii", result, seq=self.sequence)
             if nucleus == "1H" and wresult is not None:
-                water_raw_filepath = os.path.join(workpath, f"{label}.H2O")
-                save_raw(water_raw_filepath, wresult, seq=self.sequence)
-                water_nifti_filepath = save_nifti_spec2nii(water_raw_filepath, wresult, nucleus=nucleus, seq=self.sequence)
-                if water_nifti_filepath is not None:
-                    utils.log_debug(f"Water NIfTI file generated for {label}: {water_nifti_filepath}")
-                else:
-                    utils.log_error(f"Failed to generate Water NIfTI file for {water_raw_filepath}")
+                save_raw(base_path + ".H2O", wresult, seq=self.sequence)
+                save_nifti(base_path + ".water.nii", wresult, seq=self.sequence)
         except Exception as e:
-            utils.log_error(f"Error writing CONTROL or RAW files for {label}: {e}")
-            return  # skip this voxel
+            return utils.log_error(f"Error writing CONTROL or RAW files for {label}: {e}")
 
         # Run LCModel
-        if os.name == 'nt':
-            command = f"""cd "{workpath}" & lcmodel.exe < {label}.CONTROL"""
-        else:
-            command = f"""cd "{workpath}" && ./lcmodel < {label}.CONTROL"""
+        if utils.iswindows(): command = f"""cd "{workpath}" & lcmodel.exe < {label}.CONTROL"""
+        else: command = f"""cd "{workpath}" && ./lcmodel < {label}.CONTROL"""
         utils.log_info(f"Running LCModel for {label}...")
-        utils.log_debug("\n\t" + command)
+        utils.log_debug(f"LCModel command: {command}")
 
         try:
-            result_lcmodel = subprocess.run(command, shell=True,
-                                            capture_output=True, text=True)
-            utils.log_debug(f"LCModel Output for {label}:\n{result_lcmodel.stdout}")
-            utils.log_debug(f"LCModel Errors for {label}:\n{result_lcmodel.stderr}")
-
-            expected_files = [
-                f"{label}.table", f"{label}.ps",
-                f"{label}.coord", f"{label}.csv"
-            ]
-            missing_files = [
-                f for f in expected_files
-                if not os.path.exists(os.path.join(workpath, f))
-            ]
-            
-            if missing_files:
-                utils.log_error(f"Missing LCModel output files for {label}: {missing_files}")
-        except Exception as e:
-            utils.log_error(f"LCModel execution failed for {label}: {e}")
-            return
+            result_lcmodel = subprocess.run(command, shell=True, capture_output=True, text=True, check=True)
+            utils.log_info(f"LCModel Output for {label}: {os.linesep.join([l for l in result_lcmodel.stdout.splitlines() if l])}")
+            expected_files = [f"{label}.table", f"{label}.ps", f"{label}.coord", f"{label}.csv"]
+            missing_files = [f for f in expected_files if not os.path.exists(os.path.join(workpath, f))]
+            if missing_files: utils.log_error(f"Missing LCModel output files for {label}: {missing_files}")
+        except Exception as e: return utils.log_error(f"LCModel execution failed for {label}: {e}")
 
         if result_lcmodel.returncode != 0:
-            utils.log_error(
-                f"LCModel failed for {label} with return code {result_lcmodel.returncode}"
-            )
-            return        
+            return utils.log_error(f"LCModel failed for {label} with return code {result_lcmodel.returncode}")
 
         # Move output files to savepath
         savepath = os.path.join(lcmodelsavepath, label)
-        try:
-            os.mkdir(savepath)
-        except Exception as e:
-            utils.log_error(f"Failed to create savepath for {label}: {e}")
-            return
+        try: os.mkdir(savepath)
+        except Exception as e: return utils.log_error(f"Failed to create savepath for {label}: {e}")
 
         command_move = ""
         for f in os.listdir(workpath):
-            if "lcmodel" in f.lower():
-                continue
-            if os.name == 'nt':
-                command_move += f""" & move "{os.path.join(workpath, f)}" "{savepath}" """
-            else:
-                command_move += f""" && mv "{os.path.join(workpath, f)}" "{savepath}" """
+            if "lcmodel" in f.lower(): continue
+            if utils.iswindows(): command_move += f""" & move "{os.path.join(workpath, f)}" "{savepath}" """
+            else: command_move += f""" && mv "{os.path.join(workpath, f)}" "{savepath}" """
 
         if command_move:
             command_move = command_move[3:]  # Remove initial ' & ' or ' && '
             utils.log_debug("Moving files...\n\t" + command_move)
-            try:
-                subprocess.run(command_move, shell=True, check = True)
+            try: subprocess.run(command_move, shell=True, check=True)
             except Exception as e:
                 utils.log_warning(f"Failed to move files for {label}: {e}")
                 utils.log_warning(f"Files remain in the temporary work folder: {workpath}")
@@ -699,56 +541,37 @@ def analyseResults(self):
                 read_file(filepath, self.matplotlib_canvas, self.file_text)
                 filepath_pdf = os.path.join(savepath, "lcmodel.pdf")
                 figure.savefig(filepath_pdf, dpi=600, format='pdf')
-            except Exception as e:
-                utils.log_warning(f"Failed to process coord file for {label}: {e}")
-        else:
-            utils.log_warning(f"LCModel output not found for {label}")
+            except Exception as e: utils.log_warning(f"Failed to process coord file for {label}: {e}")
+        else: utils.log_warning(f"LCModel output not found for {label}")
 
     if self.issvs:
-
         for result, label in zip(temp_results, labels):
             processVoxel(result, label)
     else:
-
-        xdim, ydim, zdim, npoints = np.array(temp_results).shape
-
+        xdim, ydim, zdim, _ = np.array(temp_results).shape
         for i in range(xdim):
             for j in range(ydim):
                 for k in range(zdim):
-
                     result_data = temp_results[i][j][k]
-
                     label = "_".join([str(i+1),str(j+1),str(k+1)])
-
                     processVoxel(result_data, label)
 
-    # Clean up workpath
-    try:
-        shutil.rmtree(workpath)  # Delete work folder
-        utils.log_debug("Workpath deleted successfully.")
-    except Exception as e:
-        utils.log_warning(f"Failed to delete workpath: {e}")
-
+    shutil.rmtree(workpath) # Clean up workpath
     utils.log_info("LCModel processing complete")
     return True
-
 
 def processPipeline(self):
     try:
         if self.current_step == 0:
             wx.CallAfter(self.plot_box.Clear)
             wx.CallAfter(self.plot_box.AppendItems, "")
-            if not hasattr(self, 'originalData') or self.originalData is None:
-                if not loadInput(self):
-                    utils.log_error("Error loading input")
-                    wx.CallAfter(self.reset)
-                    return
-            else:
-                utils.log_debug("Skipping loadInput because self.originalData is already loaded.")
-            
+            if not loadInput(self):
+                utils.log_error("Error loading input")
+                wx.CallAfter(self.reset)
+                return
             
         if 0 <= self.current_step and self.current_step <= len(self.steps) - 1:
-            self.retrieve_pipeline() # bad way to update any changed parameters
+            # self.retrieve_pipeline() # bad way to update any changed parameters
             processStep(self, self.steps[self.current_step], self.current_step + 1)
             wx.CallAfter(self.plot_box.AppendItems, str(self.current_step + 1) + self.steps[self.current_step].__class__.__name__)
             if not self.fast_processing:
@@ -756,15 +579,25 @@ def processPipeline(self):
                 wx.CallAfter(self.button_auto_processing.Enable)
 
         elif self.current_step == len(self.steps):
-            self.pipeline_frame.on_save_pipeline(None, os.path.join(self.outputpath, "pipeline.pipe"))
             saveDataPlot(self)
-            if analyseResults(self): wx.CallAfter(self.plot_box.AppendItems, "lcmodel")
-            else: self.reset()
+            if analyseResults(self):
+                wx.CallAfter(self.plot_box.AppendItems, "lcmodel")
+                self.pipeline_frame.on_save_pipeline(None, os.path.join(self.outputpath, "pipeline.pipe"), self.manual_adjustment_params)
+                if self.manual_adjustment_params is not None:
+                    with open(os.path.join(self.outputpath, "manual_adjustment.txt"), "w") as f:
+                        f.write("Manual adjustment parameters; these values can also be loaded with the .pipe file:\n")
+                        f.write("Frequency shift: " + str(self.manual_adjustment_params[0]) + " PPM\n" \
+                                "0th order phase shift: " + str(self.manual_adjustment_params[1]) + "°\n" \
+                                "1st order phase shift: " + str(self.manual_adjustment_params[2]) + "°/PPM\n")
+            else:
+                utils.log_error("Error analysing results")
+                wx.CallAfter(self.reset)
+                return
 
         self.current_step += 1
         wx.CallAfter(self.plot_box.SetSelection, self.current_step)
         if self.current_step > len(self.steps):
-            self.reset()
+            wx.CallAfter(self.reset)
             return
         if not self.fast_processing:
             wx.CallAfter(self.button_terminate_processing.Enable)
@@ -773,7 +606,6 @@ def processPipeline(self):
         tb_str = traceback.format_exc()
         utils.log_error(f"Pipeline error:\n{tb_str}")
         wx.CallAfter(self.button_terminate_processing.Enable)
-
 
 def autorun_pipeline_exe(self):
     while self.fast_processing and self.current_step <= len(self.steps):

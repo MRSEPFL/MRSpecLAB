@@ -128,15 +128,10 @@ class FilePanel(wx.Panel):
     def on_dclick(self, event):
         filepath = self.filepaths[self.list.GetSelection()]
         if filepath is None or filepath == "" or not os.path.exists(filepath):
-            utils.log_error("File not found")
-            return
+            return utils.log_error("File not found")
         if not any([filepath.lower().endswith(ext) for ext in utils.supported_files]):
-            utils.log_error("Invalid file type")
-            return
+            return utils.log_error("Invalid file type")
         child = PlotFrame(filepath, is_viewer=self.is_viewer)
-        canvas = child.canvas
-        text = child.text
-        read_file(filepath, canvas, text, self.is_viewer)
         event.Skip()
     
     def on_drop_files(self, filenames):

@@ -51,7 +51,7 @@ On a Linux system, the pip command given above will probably try to build the wx
 ## License and used libraries
 MRSpecLAB is released under the Apache 2.0 license.
 
-Code was taken and modified from the 'suspect' library for file-reading and processing functions and the `gsnodegraph` library for the editor panel. Windows and Linux binaries for LCModel were compiled from the source code on [Georg Oeltzschner's repository](https://github.com/schorschinho/LCModel), and compressed and shipped alongside our application for a straight-forward installation. Standardised MRS header reading was taken and slightly modified from the [REMY project](https://github.com/agudmundson/mrs_in_mrs), reading in data, data conversion and header information read-in were taken from [spec2nii](https://github.com/wtclarke/spec2nii).
+Code was taken and modified from the 'suspect' library for file-reading and processing functions and the `gsnodegraph` library for the editor panel. Windows and Linux binaries for LCModel were taken from [Georg Oeltzschner's repository](https://github.com/schorschinho/LCModel), and compressed and shipped alongside our application for a straight-forward installation. Standardised MRS header reading was taken and slightly modified from the [REMY project](https://github.com/agudmundson/mrs_in_mrs), reading in data, data conversion and header information read-in were taken from [spec2nii](https://github.com/wtclarke/spec2nii).
 
 ## Acknowledgements
 <table>

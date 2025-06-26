@@ -178,16 +178,16 @@ class MetaboliteMapParameterDialog(wx.Frame):
 
     def on_map_orientation_change(self, event):
         selection = self.map_view_ctrl.GetSelection()
-        print(f"Map orientation changed to index: {selection}")
+        utils.log_info(f"Map orientation changed to index: {selection}")
         # for updating the maximal silce number
         self.max_d = self.get_max_d()
-        print("max_d = ", self.max_d)
+        # print("max_d = ", self.max_d)
         self.map_slice_ctrl.SetRange(1, max(1, self.max_d))  # Prevent min > max issue
 
 
     def get_max_d(self):
         """Get the number of available slices from CSI coords in selected folder."""
-        print("Start reading .coord")
+        utils.log_debug("Start reading .coord")
 
         if not hasattr(self, "folder_picker"):
             return 1  # Default slice count
@@ -213,8 +213,8 @@ class MetaboliteMapParameterDialog(wx.Frame):
             indices = np.array(indices)
             x, y, z = indices.max(axis=0)  # Get matrix dimensions
 
-            print("x,y,z=",x,y,z)
-            print("self.map_view_ctrl.GetSelection() = ", self.map_view_ctrl.GetSelection())
+            # print(f"{(x, y, z) = }")"
+            # print(f"{self.map_view_ctrl.GetSelection() = }")
             map_view = self.map_view_ctrl.GetSelection()
             if map_view == 0:
                 return x
@@ -254,7 +254,7 @@ class MetaboliteMapParameterDialog(wx.Frame):
 
         # for updating the maximal silce number
         self.max_d = self.get_max_d()
-        print("max_d = ", self.max_d)
+        # print("max_d = ", self.max_d)
         self.map_slice_ctrl.SetRange(1, max(1, self.max_d))  # Prevent min > max issue
 
         # for updating the matabolite list
@@ -310,7 +310,7 @@ class MetaboliteMapParameterDialog(wx.Frame):
             "crlb_threshold": int(self.crlb_ctrl.GetValue()),
             "scaling": float(self.scaling_ctrl.GetValue())
         }
-        print("dim = ", self.Parent.data_to_plot["dim"])
+        # print("dim = ", self.Parent.data_to_plot["dim"])
 
         self.Parent.data_to_plot["conc_map_to_plot"] = get_conc_map(self.Parent.data_to_plot)
 

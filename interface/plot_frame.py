@@ -9,7 +9,7 @@ class PlotFrame(wx.Frame):
         super().__init__(None)
         self.filepath = filepath
         if title is None: title = filepath
-        self.is_viewer = is_viewer
+        self.is_viewer = is_viewer # for the standalone file viewer
         self.SetTitle(title)
         #self.SetIcon(images.icon_img_32.GetIcon())
         self.SetBackgroundColour(wx.Colour(XISLAND1)) 
@@ -27,6 +27,7 @@ class PlotFrame(wx.Frame):
         self.gaussian_checkbox.SetValue(False)
         self.text = wx.TextCtrl(self.rightPanel, wx.ID_ANY, "", style=wx.TE_READONLY | wx.TE_MULTILINE)
         self.text.SetFont(wx.Font(9, wx.FONTFAMILY_DEFAULT, wx.NORMAL,wx.FONTWEIGHT_NORMAL, False))
+        self.text.Bind(wx.EVT_SET_FOCUS, lambda event: self.SetFocus()) # remove blinking cursor
 
         self.leftSizer = wx.BoxSizer(wx.VERTICAL)
         self.leftSizer.Add(self.canvas, 1, wx.EXPAND, 0)
@@ -45,10 +46,11 @@ class PlotFrame(wx.Frame):
         self.ccombine_checkbox.Bind(wx.EVT_CHECKBOX, self.on_checkbox)
         self.gaussian_checkbox.Bind(wx.EVT_CHECKBOX, self.on_checkbox)
 
-        if self.filepath.lower().endswith(".coord"):
-            self.gaussian_checkbox.Hide()
+        self.on_checkbox()
         self.Layout()
     
-    def on_checkbox(self, event):
-        read_file(self.filepath, self.canvas, self.text, self.ccombine_checkbox.GetValue(), self.gaussian_checkbox.GetValue())
-        event.Skip()
+    def on_checkbox(self, event=None):
+        multi_coil = read_file(self.filepath, self.canvas, self.text, self.ccombine_checkbox.GetValue(), self.gaussian_checkbox.GetValue())
+        self.ccombine_checkbox.Enable(multi_coil)
+        self.gaussian_checkbox.Enable(self.filepath.lower().endswith(".coord"))
+        if event is not None: event.Skip()

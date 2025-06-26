@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from interface import utils
 
-from skimage import measure
+# from skimage import measure
 
 from inout.read_coord import ReadlcmCoord, extract_reference
 
@@ -44,7 +44,7 @@ def get_coord_map(dir):
                 lcm[m][n][k] = ReadlcmCoord(filepath)
             else:
                 lcm[m][n][k] = {}
-                print(f"{filepath} does not exist!")
+                utils.log_error(f"{filepath} does not exist")
 
         return max_m, max_n, max_k, lcm
 
@@ -239,7 +239,7 @@ def create_brain_mask(slice_data):
     center_y = rows // 2
 
     # Detect boundaries in the binary image
-    boundaries = measure.find_contours(binary_image, level=0.5)
+    # boundaries = measure.find_contours(binary_image, level=0.5)
 
     # Initialize an empty mask with False (0) values
     mask = np.zeros_like(binary_image, dtype=bool)
@@ -271,16 +271,16 @@ def get_metabolite_list(filename):
     """Retrieve the metabolite list from the given file."""
 
     if not os.path.exists(filename):
-        print(f"Error: File '{filename}' not found.")
+        utils.log_error(f"File '{filename}' not found.")
         return None  # Or raise an exception: raise FileNotFoundError(f"File '{filename}' not found.")
 
     lcm = ReadlcmCoord(filename)
     ref = extract_reference(filename)
 
-    if ref is None:
-        print(f"Reference is not found.")
-    else:
-        print(f"Reference is '{ref}'.")
+    # if ref is None:
+    #     print(f"Reference is not found.")
+    # else:
+    #     print(f"Reference is '{ref}'.")
 
     metab_list = [metab['name'] for metab in lcm['conc']]
     # metab_list_with_ref = [name + ref for name in metab_list]
