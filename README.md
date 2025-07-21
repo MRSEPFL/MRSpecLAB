@@ -9,7 +9,7 @@
 
 --> source code available for other OS in this repository.
 
-The MRSpecLAB platform is closely described in this publication: [PUBLICATION](insert link). For help please contact us under: MRSpecLAB@gmail.com.
+The MRSpecLAB platform is closely described in this publication: [PUBLICATION](https://www.frontiersin.org/journals/neuroimaging/articles/10.3389/fnimg.2025.1610658/full). For help please contact us under: MRSpecLAB@gmail.com.
 If you would like to be kept updated about the newest additions and updates, please subscribe to the [mailinglist](https://forms.gle/AQjCQu7JHhiadrfx8).
 
 A detailed user manual can be found in [MANUAL.md](/MANUAL.md).
