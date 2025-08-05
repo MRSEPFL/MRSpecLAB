@@ -113,7 +113,17 @@ def save_nifti(filepath, data, seq="unknown_seq"):
         "RepetitionTime": getattr(data[0], 'tr', None), # ms
         "ResonantNucleus": [getattr(data[0], 'Nucleus', "1H")],
         "Sequence": seq,
-        "dim_5": "DIM_DYN"
+        "dim_5": "DIM_MEAS"
     }
-    img.header.extensions.append(nib.nifti1.Nifti1Extension(40, json.dumps(metadata).encode('utf-8')))
+    img.header.extensions.append(nib.nifti1.Nifti1Extension(44, json.dumps(metadata).encode('utf-8')))
     nib.save(img, filepath)
+    
+    # Write sidecar JSON next to .nii/.nii.gz
+    if filepath.endswith(".nii.gz"):
+        json_path = filepath[:-7] + ".json"
+    elif filepath.endswith(".nii"):
+        json_path = filepath[:-4] + ".json"
+    else:
+        json_path = filepath + ".json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
