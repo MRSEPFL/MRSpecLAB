@@ -108,11 +108,12 @@ def save_nifti(filepath, data, seq="unknown_seq"):
     if img.header['descrip'].nbytes > 80: img.header['descrip'] = img.header['descrip'][:80]
     metadata = {
         "SpectrometerFrequency": [data[0].f0], # MHz
+        "FieldStrength": getattr(data[0], 'fieldstrength', 3.0),  # Tesla
         "EchoTime": data[0].te, # ms
         "RepetitionTime": getattr(data[0], 'tr', None), # ms
-        "ResonantNucleus": [getattr(data[0], 'nucleus', "unknown")],
+        "ResonantNucleus": [getattr(data[0], 'Nucleus', "1H")],
         "Sequence": seq,
-        "dim_5": "DIM_MEAS"
+        "dim_5": "DIM_DYN"
     }
-    img.header.extensions.append(nib.nifti1.Nifti1Extension('mrs', json.dumps(metadata).encode('utf-8')))
+    img.header.extensions.append(nib.nifti1.Nifti1Extension(40, json.dumps(metadata).encode('utf-8')))
     nib.save(img, filepath)
