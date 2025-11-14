@@ -5,7 +5,7 @@
 
 --> download example datasets, basis sets and pipelines from [zenodo](https://zenodo.org/records/14866163).
 
---> .exe and .ext (Windows/Linux) executables available in the newest release (right side of the page).
+--> .exe and .ext (Windows/Linux) executables available in the newest release ([right side of the page](https://github.com/MRSEPFL/MRSpecLAB/releases/tag/v.1.0.0)).
 
 --> source code available for other OS in this repository.
 
