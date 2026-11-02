@@ -8,10 +8,11 @@ class SubtractShots(api.ProcessingNode):
             "label": "Shot Subtraction",
             "author": "CIBM",
             "description": (
-                "Subtract consecutive pairs of shots without averaging. "
+                "Subtract consecutive pairs of shots, then average all differences. "
                 "Order 1: 1-2, 3-4, 5-6, ...; "
                 "order 2: 2-1, 4-3, 6-5, ... . "
-                "Requires an even number of shots and no missing shots."
+                "Returns one mean difference spectrum. Requires an even number "
+                "of shots and no missing shots. Average within each input list."
             )
         }
         self.parameters = [
@@ -47,8 +48,9 @@ class SubtractShots(api.ProcessingNode):
                 f"Received {len(spectra)}; the last shot has no partner."
             )
 
-        output = []
-        labels = []
+        differences = []
+        template = None
+        expected_shape = None
 
         for i in range(0, len(spectra), 2):
             first, second = spectra[i:i + 2]
@@ -66,18 +68,35 @@ class SubtractShots(api.ProcessingNode):
                     f"{first_values.shape} and {second_values.shape}."
                 )
 
+            if expected_shape is None:
+                expected_shape = first_values.shape
+            elif first_values.shape != expected_shape:
+                raise ValueError(
+                    "All pairs must have the same shape for averaging. "
+                    f"Expected {expected_shape}; received {first_values.shape}."
+                )
+
+            # Convert before subtraction to avoid integer overflow and retain
+            # complex values. Each valid pair receives equal weight.
+            dtype = np.result_type(first_values.dtype, second_values.dtype,
+                                   np.float64)
+            first_values = first_values.astype(dtype, copy=False)
+            second_values = second_values.astype(dtype, copy=False)
             if order == 1:
-                difference = first.inherit(first_values - second_values)
-                label = f"Shots{i + 1}-{i + 2}"
+                difference = first_values - second_values
+                if template is None:
+                    template = first
             else:
-                difference = second.inherit(second_values - first_values)
-                label = f"Shots{i + 2}-{i + 1}"
+                difference = second_values - first_values
+                if template is None:
+                    template = second
+            differences.append(difference)
 
-            output.append(difference)
-            labels.append(label)
+        mean_difference = np.mean(np.stack(differences, axis=0), axis=0)
+        data["output"] = [template.inherit(mean_difference)]
+        direction = "odd-even" if order == 1 else "even-odd"
+        data["labels"] = [f"MeanDifference_{direction}_{len(differences)}pairs"]
 
-        data["output"] = output
-        data["labels"] = labels
 
 
 api.RegisterNode(SubtractShots, "SubtractShots")
